@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Attendance {{ day }}{% endblock %}
+{% block body %}
+<div class="row">
+  <h1>Attendance — {{ day }}</h1>
+  <form method="get" class="inline"><input type="date" name="day" value="{{ day }}"> <button>Show</button></form>
+  <a class="button" href="/export.csv?start={{ day }}&end={{ day }}">Download CSV (this day)</a>
+</div>
+{% if not classes %}
+  <p class="card">No boards or results yet. Import <b>server/boards.json</b> from the USB on the <a href="/boards">Boards</a> page.</p>
+{% else %}
+<table class="grid">
+  <thead><tr><th>Class</th>{% for p in periods %}<th>Period {{ p }}</th>{% endfor %}<th>Left after being present</th></tr></thead>
+  <tbody>
+  {% for c in classes %}
+    <tr>
+      <th>{{ c }}</th>
+      {% for p in periods %}
+        <td>
+        {% set k = grid[c].get(p) %}
+        {% if k %}
+          <a class="cell" href="/class/{{ c }}/{{ day }}/{{ p }}">
+            <span class="dot present"></span>{{ k.present }}
+            <span class="dot absent"></span>{{ k.absent }}
+            {% if k.needs_review %}<span class="dot needs_review"></span>{{ k.needs_review }}{% endif %}
+            {% if k.no_data %}<span class="dot no_data"></span>{{ k.no_data }}{% endif %}
+          </a>
+        {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+      {% endfor %}
+      <td>{% if flags[c] %}<span class="badge warn">{{ flags[c]|length }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="legend"><span class="dot present"></span>present <span class="dot absent"></span>absent <span class="dot needs_review"></span>needs review <span class="dot no_data"></span>no data (camera problem)</p>
+{% endif %}
+{% endblock %}

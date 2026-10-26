@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Boards{% endblock %}
+{% block body %}
+<h1>Boards</h1>
+{% if message %}<p class="card">{{ message }}</p>{% endif %}
+<table class="list">
+  <thead><tr><th>Board</th><th>Classes</th><th>Last contact</th><th>Status</th><th>Next attendance</th><th>Waiting to send</th></tr></thead>
+  <tbody>
+  {% for b in rows %}
+  <tr>
+    <td><b>{{ b.code }}</b> <span class="muted">{{ b.kind }}{% if b.kind == 'lab' %} · {{ b.name }}{% endif %}</span></td>
+    <td>{{ b.classes }}</td>
+    <td>{{ b.last_seen or 'never' }}</td>
+    <td>{% if b.hb %}{{ 'running' if b.hb.armed else 'NOT running' }} · app {{ b.hb.app_version }}{% if b.hb.last_error %}<br><span class="error">{{ b.hb.last_error }}</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>{{ b.hb.next_capture if b.hb else '' }}</td>
+    <td>{{ b.hb.pending if b.hb else '' }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">No boards yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if admin.can_edit %}
+<section class="card">
+  <h2>Add / update boards</h2>
+  <p>Upload <b>SSAS-USB/server/boards.json</b> (made by SSAS Studio when you export to USB).</p>
+  <form method="post" action="/boards/import" enctype="multipart/form-data" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="file" name="file" accept=".json" required> <button class="primary">Upload</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

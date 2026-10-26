@@ -1,0 +1,213 @@
+name: Build
+
+on:
+  push:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "web/**"
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a GitHub Release with the installer and the APK"
+        type: boolean
+        default: false
+      version:
+        description: "Version number (e.g. 0.1.0)"
+        default: "0.1.0"
+
+permissions:
+  contents: write
+
+env:
+  VERSION: ${{ inputs.version || '0.1.0' }}
+
+jobs:
+  models:
+    name: Download face models (for tests only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: models
+          key: models-v1
+      - name: Download
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p models dl
+          curl -sSL -o dl/buffalo_l.zip https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip
+          echo "80ffe37d8a5940d59a7384c201a2a38d4741f2f3c51eef46ebb28218a7b0ca2f  dl/buffalo_l.zip" | sha256sum -c -
+          unzip -o -j dl/buffalo_l.zip det_10g.onnx w600k_r50.onnx 2d106det.onnx -d models
+          if curl -sSL --fail -o dl/rtmo.zip "https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip"; then
+            unzip -o dl/rtmo.zip -d dl/rtmo
+            find dl/rtmo -name "*.onnx" -exec cp {} models/rtmo-s.onnx \;
+          else
+            echo "::warning::Could not download the RTMO pose model; pose tests will be skipped"
+          fi
+          ls -la models
+      - uses: actions/upload-artifact@v4
+        with:
+          name: models
+          path: models
+          retention-days: 1
+
+  studio-tests:
+    name: Studio tests (Linux)
+    needs: models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: models
+          path: models
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - run: pip install -r studio/requirements-dev.txt
+      - name: Tests
+        working-directory: studio
+        env:
+          SSAS_MODELS_DIR: ${{ github.workspace }}/models
+        run: python -m pytest -q
+      - name: The app starts
+        working-directory: studio
+        env:
+          QT_QPA_PLATFORM: offscreen
+          SSAS_SMOKE_TEST: "1"
+        run: python -m ssas_studio
+
+  server-tests:
+    name: Server tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r server/requirements-dev.txt
+      - working-directory: server
+        run: python -m pytest -q
+
+  android:
+    name: Board app (APK)
+    needs: models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/download-artifact@v4
+        with:
+          name: models
+          path: models
+      - name: Optional private signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "SSAS_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::notice::Signing the APK with the public test key (add the ANDROID_KEYSTORE_BASE64 secret to use your own)"
+          fi
+      - name: Test and build
+        working-directory: board-app
+        env:
+          SSAS_MODELS_DIR: ${{ github.workspace }}/models
+          SSAS_VERSION: ${{ env.VERSION }}
+          SSAS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SSAS_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SSAS_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          [ -n "$SSAS_KEYSTORE_PASSWORD" ] || unset SSAS_KEYSTORE_PASSWORD SSAS_KEY_ALIAS SSAS_KEY_PASSWORD
+          chmod +x gradlew
+          ./gradlew --no-daemon :core:test :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../ssas-board.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ssas-board-apk
+          path: ssas-board.apk
+
+  studio-windows:
+    name: Studio installer (Windows .exe)
+    needs: android
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ssas-board-apk
+          path: apk
+      - run: pip install -r studio/requirements-windows.txt
+      - name: Build the program (no console window)
+        working-directory: studio
+        env:
+          SSAS_BOARD_APK: ${{ github.workspace }}\apk\ssas-board.apk
+        run: |
+          python packaging/make_icon.py
+          pyinstaller packaging/ssas-studio.spec --noconfirm
+      - name: The program starts
+        working-directory: studio
+        shell: pwsh
+        run: |
+          $env:SSAS_SMOKE_TEST = "1"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $p = Start-Process -FilePath "dist\SSAS Studio\SSAS Studio.exe" -Wait -PassThru
+          Write-Host "exit code $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit 1 }
+          if (-not (Test-Path "dist\SSAS Studio\_internal\board\ssas-board.apk")) { Write-Error "APK not bundled"; exit 1 }
+      - name: Installer (Inno Setup)
+        working-directory: studio/packaging
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=$env:VERSION" installer.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem ..\dist\*.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ssas-studio-setup
+          path: studio/dist/SSAS-Studio-Setup-*.exe
+
+  release:
+    name: Publish release
+    if: github.event_name == 'workflow_dispatch' && inputs.release
+    needs: [studio-windows, android, server-tests, studio-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ssas-board-apk
+          path: out
+      - uses: actions/download-artifact@v4
+        with:
+          name: ssas-studio-setup
+          path: out
+      - name: Server package
+        run: |
+          tar --exclude='server/tests' --exclude='server/data' --exclude='__pycache__' -czf "out/ssas-server-${VERSION}.tar.gz" server
+          ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: SSAS ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            **Downloads**
+            - `SSAS-Studio-Setup-${{ env.VERSION }}.exe` — the laptop program (capture students, train, export to USB). Windows 10/11.
+            - `ssas-board.apk` — the app for the classroom boards (also inside the USB folder that Studio exports).
+            - `ssas-server-${{ env.VERSION }}.tar.gz` — the small server (see docs/server-setup.md).
+
+            Guides: docs/studio-guide.md · docs/board-install.md · docs/server-setup.md
+          files: out/*

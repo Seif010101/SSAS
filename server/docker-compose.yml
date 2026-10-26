@@ -1,0 +1,14 @@
+# SSAS server: one container, HTTPS on port 443, all data in ./data (back this folder up).
+services:
+  ssas:
+    build: .
+    image: ssas-server:local
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "443:8443"
+    volumes:
+      - ./data:/data
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

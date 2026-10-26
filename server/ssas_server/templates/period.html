@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} P{{ period }}{% endblock %}
+{% block body %}
+<p><a href="/?day={{ day }}">← {{ day }}</a></p>
+<h1>{{ code }} · period {{ period }} · {{ day }}</h1>
+<p class="muted">Taken by board {{ p.board_code }} at {{ p.captured_at }} · {{ p.valid_frames }} good pictures of {{ p.frames }}
+  {% if p.camera_problem %}· <span class="error">camera problem: {{ p.camera_problem }}</span>{% endif %}
+  · received {{ received }}</p>
+<p>{% for k, v in c.items() %}<span class="pill {{ k }}">{{ labels[k] }}: {{ v }}</span> {% endfor %}</p>
+<table class="list">
+  <thead><tr><th>Student</th><th>ID</th><th>Status</th><th>Note</th></tr></thead>
+  <tbody>
+  {% for s in p.students %}
+    <tr>
+      <td dir="auto">{{ s.name }}</td>
+      <td class="muted">{{ s.id }}</td>
+      <td><span class="dot {{ s.status }}"></span> {{ labels.get(s.status, s.status) }}</td>
+      <td>{% if s.id in flags and flags[s.id].absent_from == period %}<span class="badge warn">was present in period {{ flags[s.id].present_in }}</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

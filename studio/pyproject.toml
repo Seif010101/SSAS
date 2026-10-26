@@ -1,0 +1,22 @@
+[project]
+name = "ssas-studio"
+version = "0.1.0"
+description = "SSAS Studio: capture students, train one face model per class, export to USB for the classroom boards."
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "opencv-python-headless>=4.10",
+    "PySide6-Essentials>=6.7",
+    "openpyxl>=3.1",
+    "onnxruntime-directml>=1.20; sys_platform == 'win32'",
+    "onnxruntime>=1.20; sys_platform != 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "scikit-image>=0.24"]
+
+[project.gui-scripts]
+ssas-studio = "ssas_studio.app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

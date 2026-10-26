@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SSAS{% endblock %} · {{ school }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="mark">✓</span> SSAS <span class="muted">· {{ school }}</span></div>
+    {% if admin %}
+    <nav>
+      <a href="/">Attendance</a>
+      <a href="/boards">Boards</a>
+      <form method="post" action="/logout" class="inline"><button class="link">Sign out ({{ admin.name }}{% if not admin.can_edit %}, view only{% endif %})</button></form>
+    </nav>
+    {% endif %}
+  </header>
+  <main>{% block body %}{% endblock %}</main>
+  <footer class="muted">SSAS server {{ version }}</footer>
+</body>
+</html>
