@@ -87,7 +87,9 @@ class Settings:
     folds: int = 5
     seeds: int = 3
     min_accuracy: float = 0.98
-    photos_per_student: int = 80
+    photos_per_student: int = 40
+    strict_order: bool = False  # capture: ring parts must be followed in a random order (anti-cheat)
+    settings_version: int = 2
     server_url: str = ""
     server_cert_sha256: str = ""
     board_admin_pin: str = "2468"
@@ -216,7 +218,10 @@ class School:
     @property
     def settings(self) -> Settings:
         base = asdict(Settings())
-        base.update(self._school.get("settings", {}))
+        stored = self._school.get("settings", {})
+        base.update(stored)
+        if stored.get("settings_version", 1) < 2 and base["photos_per_student"] == 80:
+            base["photos_per_student"] = 40  # the old default; capture is now shorter
         return Settings(**{k: base[k] for k in asdict(Settings())})
 
     @settings.setter

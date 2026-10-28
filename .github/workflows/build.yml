@@ -195,7 +195,7 @@ jobs:
           path: out
       - name: Server package
         run: |
-          tar --exclude='server/tests' --exclude='server/data' --exclude='__pycache__' -czf "out/ssas-server-${VERSION}.tar.gz" server
+          tar --exclude='server/tests' --exclude='server/data' --exclude='__pycache__' -czf "out/ssas-server.tar.gz" server
           ls -la out
       - uses: softprops/action-gh-release@v2
         with:
@@ -207,7 +207,7 @@ jobs:
             **Downloads**
             - `SSAS-Studio-Setup-${{ env.VERSION }}.exe` — the laptop program (capture students, train, export to USB). Windows 10/11.
             - `ssas-board.apk` — the app for the classroom boards (also inside the USB folder that Studio exports).
-            - `ssas-server-${{ env.VERSION }}.tar.gz` — the small server (see docs/server-setup.md).
+            - `ssas-server.tar.gz` — the small server (see docs/server-setup.md).
 
             Guides: docs/studio-guide.md · docs/board-install.md · docs/server-setup.md
           files: out/*

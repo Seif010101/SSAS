@@ -13,13 +13,12 @@ def main() -> int:
     from .resources import APP_NAME, ORG_NAME
     from .ui.context import AppContext
     from .ui.main_window import MainWindow
-    from .ui.theme import STYLE, app_icon
+    from .ui.theme import app_icon, apply as apply_theme
 
     app = QApplication(sys.argv)
     app.setOrganizationName(ORG_NAME)
     app.setApplicationName(APP_NAME)
-    app.setStyle("Fusion")
-    app.setStyleSheet(STYLE)
+    apply_theme(app)
     app.setWindowIcon(app_icon())
     ctx = AppContext()
     win = MainWindow(ctx)

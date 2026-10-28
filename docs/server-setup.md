@@ -86,15 +86,15 @@ exit
 ## 7. تحميل برنامج السيرفر وتشغيله
 ```bash
 cd ~
-wget https://github.com/Seif010101/SSAS/releases/latest/download/ssas-server-0.1.0.tar.gz
-tar xzf ssas-server-0.1.0.tar.gz
+wget https://github.com/Seif010101/SSAS/releases/latest/download/ssas-server.tar.gz
+tar xzf ssas-server.tar.gz
 cd server
 cp .env.example .env
 nano .env            # اكتب اسم المدرسة في SSAS_SCHOOL_NAME، وبعدين احفظ
 docker compose up -d --build
 docker compose ps    # لازم يكتب "running"
 ```
-(لو رقم النسخة اتغير، غيّره في أول سطرين.)
+(الرابط ده بينزّل **أحدث نسخة** دايماً.)
 
 ## 8. حسابات الأدمن (باسورد + كود من 6 أرقام)
 لكل أدمن (انت والمشرف):
@@ -160,8 +160,8 @@ crontab -e
 
 ## 12. التحديث لنسخة جديدة
 ```bash
-cd ~ && wget https://github.com/Seif010101/SSAS/releases/latest/download/ssas-server-X.Y.Z.tar.gz
-tar xzf ssas-server-X.Y.Z.tar.gz        # بيستبدل الملفات من غير ما يلمس data/ و .env
+cd ~ && wget https://github.com/Seif010101/SSAS/releases/latest/download/ssas-server.tar.gz
+tar xzf ssas-server.tar.gz        # بيستبدل الملفات من غير ما يلمس data/ و .env
 cd server && docker compose up -d --build
 ```
 

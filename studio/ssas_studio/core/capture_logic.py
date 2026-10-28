@@ -1,9 +1,11 @@
 """The Face-ID-like capture flow, independent of the GUI so it can be tested.
 
-The student looks straight first, then moves their head toward ring segments
-shown in a random order (so a printed photo or a video cannot follow), and must
-blink once. Photos are saved only when exactly one person is in front of the
-camera and the picture quality is good.
+The student looks straight first, then slowly turns their head around a circle.
+By default each of the 8 ring parts fills wherever the nose points ("free sweep").
+In strict mode the parts must be followed in a random order instead, so a printed
+photo or a video cannot follow. The student must also blink once, at any time.
+Photos are saved only when exactly one person is in front of the camera and the
+picture quality is good.
 """
 
 from __future__ import annotations
@@ -12,9 +14,11 @@ import math
 import random
 from dataclasses import dataclass, field
 
-RING_SEGMENTS = 12
+RING_SEGMENTS = 8
 RING_RADIUS_DEG = 18.0
-MATCH_TOLERANCE_DEG = 9.0
+MATCH_TOLERANCE_DEG = 12.0  # strict mode: how close to the prompted part
+FREE_MIN_DEG = 9.0  # free sweep: the head must be turned at least this far from straight
+FREE_MAX_DEG = 45.0
 FRONT_TOLERANCE_DEG = 8.0
 SECOND_FACE_RATIO = 0.35  # another face at least this big (vs the main one) = a second person
 BLINK_CLOSED = 0.55  # eye openness below this fraction of the student's normal = closed
@@ -31,9 +35,10 @@ class Feedback:
 
 @dataclass
 class CaptureSession:
-    photos_per_segment: int = 6
+    photos_per_segment: int = 4
     front_photos: int = 8
     require_blink: bool = True
+    strict_order: bool = False
     seed: int | None = None
     order: list[int] = field(default_factory=list)
     filled: list[int] = field(default_factory=lambda: [0] * RING_SEGMENTS)
@@ -62,12 +67,32 @@ class CaptureSession:
 
     @property
     def current_target(self) -> int | None:
-        if self.front_saved < self.front_photos:
+        """The part to follow in strict mode (None while looking straight, or in free sweep)."""
+        if not self.strict_order or self.front_saved < self.front_photos:
             return None
         for seg in self.order:
             if self.filled[seg] < self.photos_per_segment:
                 return seg
         return None
+
+    @property
+    def phase(self) -> str:
+        if self.finished:
+            return "done"
+        if self.front_saved < self.front_photos:
+            return "front"
+        if self.segments_done < RING_SEGMENTS:
+            return "ring"
+        return "blink"
+
+    @staticmethod
+    def segment_at(dyaw: float, dpitch: float) -> int | None:
+        """Which ring part the head is pointing at (display space), None when too close to straight or too far."""
+        r = math.hypot(dyaw, dpitch)
+        if r < FREE_MIN_DEG or r > FREE_MAX_DEG:
+            return None
+        theta = math.atan2(dpitch, dyaw) % (2 * math.pi)
+        return round(theta / (2 * math.pi / RING_SEGMENTS)) % RING_SEGMENTS
 
     @property
     def finished(self) -> bool:
@@ -110,25 +135,78 @@ class CaptureSession:
         self._update_blink(openness)
 
         if self.finished:
-            return Feedback("Done — all photos saved")
+            return Feedback("Done ✓")
         if quality_problem:
             return Feedback(quality_problem, target=self.current_target, blocked=True)
 
         dyaw, dpitch = -yaw, pitch  # display space
-        target = self.current_target
-        if target is None and self.front_saved < self.front_photos:
+        if self.front_saved < self.front_photos:
             if abs(dyaw) <= FRONT_TOLERANCE_DEG and abs(dpitch) <= FRONT_TOLERANCE_DEG:
                 self.front_saved += 1
                 return Feedback("Hold still — looking straight", save=True)
             return Feedback("Look straight at the camera")
-        if target is None:
-            # All photos done, only the blink is missing.
+        if self.segments_done == RING_SEGMENTS:
             return Feedback("Now blink once, please")
-        ty, tp = self.segment_vector(target)
-        if math.hypot(dyaw - ty, dpitch - tp) <= MATCH_TOLERANCE_DEG:
-            self.filled[target] += 1
-            msg = "Good — hold it"
-            if not self.blink_done and self.require_blink and self.segments_done == RING_SEGMENTS:
-                msg = "Now blink once, please"
-            return Feedback(msg, save=True, target=target)
-        return Feedback("Slowly move your nose toward the green part of the circle", target=target)
+
+        if self.strict_order:
+            target = self.current_target
+            ty, tp = self.segment_vector(target)
+            if math.hypot(dyaw - ty, dpitch - tp) <= MATCH_TOLERANCE_DEG:
+                self.filled[target] += 1
+                return Feedback(self._ring_message(), save=True, target=target)
+            return Feedback("Slowly move your nose toward the green part of the circle", target=target)
+
+        seg = self.segment_at(dyaw, dpitch)
+        if seg is None:
+            return Feedback("Turn your head slowly in a circle")
+        if self.filled[seg] >= self.photos_per_segment:
+            return Feedback("Keep turning — fill the grey parts")
+        self.filled[seg] += 1
+        return Feedback(self._ring_message(), save=True, target=seg)
+
+    def _ring_message(self) -> str:
+        if self.segments_done == RING_SEGMENTS - 1 and self.require_blink and not self.blink_done:
+            return "Good — and blink once"
+        return "Good — keep turning"
+
+
+@dataclass
+class AutoStart:
+    """Decides when to begin capturing the next student: one clear face, held steady for a moment.
+
+    After a student is finished the previous face has to leave the picture first, so the same
+    person is not captured twice by accident.
+    """
+
+    hold_s: float = 1.0
+    absent_s: float = 0.5
+    min_face_px: float = 110.0
+    need_absence: bool = False
+    _since: float | None = None
+    _gone_since: float | None = None
+
+    def rearm(self) -> None:
+        self.need_absence = True
+        self._since = None
+        self._gone_since = None
+
+    def update(self, face_widths: list[float], now: float) -> tuple[float, bool]:
+        """Returns (how far the hold is, 0..1, ready to start)."""
+        if not face_widths:
+            self._since = None
+            if self.need_absence:
+                if self._gone_since is None:
+                    self._gone_since = now
+                elif now - self._gone_since >= self.absent_s:
+                    self.need_absence = False
+            return 0.0, False
+        self._gone_since = None
+        main = max(face_widths)
+        crowded = sum(1 for w in face_widths if w >= SECOND_FACE_RATIO * main) > 1
+        if self.need_absence or crowded or main < self.min_face_px:
+            self._since = None
+            return 0.0, False
+        if self._since is None:
+            self._since = now
+        frac = min(1.0, (now - self._since) / self.hold_s)
+        return frac, frac >= 1.0

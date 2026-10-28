@@ -1,6 +1,6 @@
 [project]
 name = "ssas-studio"
-version = "0.1.0"
+version = "0.1.1"
 description = "SSAS Studio: capture students, train one face model per class, export to USB for the classroom boards."
 requires-python = ">=3.11"
 dependencies = [

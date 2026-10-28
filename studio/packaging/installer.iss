@@ -1,6 +1,6 @@
 ; Inno Setup script: builds SSAS-Studio-Setup-<version>.exe from dist\SSAS Studio
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.1.1"
 #endif
 
 [Setup]

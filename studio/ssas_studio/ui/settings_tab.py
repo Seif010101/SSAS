@@ -100,6 +100,8 @@ class SettingsTab(QWidget):
         self.min_acc.setSuffix(" %")
         self.photos = QSpinBox()
         self.photos.setRange(20, 300)
+        self.photos.setSuffix(" photos (40 is enough)")
+        self.strict = QCheckBox("Strict capture: the student must follow the circle in a random order (slower)")
         self.gpu = QCheckBox("Use the graphics card (GPU) when available")
         tf.addRow("Training rounds (epochs)", self.epochs)
         tf.addRow("Classroom-like variants", self.aug)
@@ -107,6 +109,7 @@ class SettingsTab(QWidget):
         tf.addRow("Repeats (seeds)", self.seeds)
         tf.addRow("Minimum accuracy to pass", self.min_acc)
         tf.addRow("Photos per student", self.photos)
+        tf.addRow("", self.strict)
         tf.addRow("", self.gpu)
         self.providers = muted("")
         tf.addRow("Available", self.providers)
@@ -144,6 +147,7 @@ class SettingsTab(QWidget):
         self.seeds.setValue(s.seeds)
         self.min_acc.setValue(s.min_accuracy * 100)
         self.photos.setValue(s.photos_per_student)
+        self.strict.setChecked(s.strict_order)
         self.gpu.setChecked(self.ctx.prefer_gpu)
         self.server_url.setText(s.server_url)
         self.server_fp.setText(s.server_cert_sha256)
@@ -172,6 +176,7 @@ class SettingsTab(QWidget):
         s.seeds = self.seeds.value()
         s.min_accuracy = self.min_acc.value() / 100
         s.photos_per_student = self.photos.value()
+        s.strict_order = self.strict.isChecked()
         s.server_url = self.server_url.text().strip().rstrip("/")
         s.server_cert_sha256 = self.server_fp.text().strip().replace(":", "").lower()
         self.ctx.school.settings = s
