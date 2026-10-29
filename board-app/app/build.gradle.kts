@@ -15,7 +15,8 @@ android {
     defaultConfig {
         applicationId = "org.ssas.board"
         minSdk = 26
-        targetSdk = 33
+        // 29: lets the board read the USB stick directly (most boards have no system folder picker).
+        targetSdk = 29
         versionCode = appVersionCode
         versionName = appVersion
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }

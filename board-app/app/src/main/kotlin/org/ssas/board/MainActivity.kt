@@ -27,7 +27,10 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import org.ssas.board.core.FileTree
 import org.ssas.board.core.FramePipeline
+import org.ssas.board.core.UsbPackage
+import org.ssas.board.core.UsbTree
 
 /**
  * The only screen: the camera picture with head boxes and stick figures, and a small status line.
@@ -88,13 +91,13 @@ class MainActivity : Activity() {
             setPadding(48, 48, 48, 48)
             setBackgroundColor(Color.parseColor("#0F172A"))
             addView(TextView(context).apply {
-                text = "This board is not set up yet.\n\nPlug in the USB stick made by SSAS Studio, press the button and choose the USB stick (or its SSAS-USB folder)."
+                text = "This board is not set up yet.\n\nPlug in the USB stick made by SSAS Studio and press the button. The board finds the SSAS-USB folder by itself."
                 setTextColor(Color.WHITE); textSize = 20f; gravity = Gravity.CENTER
             })
             addView(Button(context).apply {
                 text = "Import from USB"
                 textSize = 20f
-                setOnClickListener { pickFolder(REQ_IMPORT) }
+                setOnClickListener { startImport() }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = 40 })
         }
         root.addView(setupPanel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -153,8 +156,14 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_STORAGE) {
+            if (hasStorage()) startImport() else msg("Storage permission is needed to read the USB stick. Press Import again and allow it.")
+            return
+        }
         if (hasCamera()) arm() else status.text = "Camera permission is needed. Open the app again and allow the camera."
     }
+
+    private fun hasStorage() = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
 
     private fun arm() {
         AttendanceService.start(this)
@@ -265,9 +274,9 @@ class MainActivity : Activity() {
         )
         AlertDialog.Builder(this).setTitle("SSAS Board — admin").setItems(items) { _, which ->
             when (which) {
-                0 -> pickFolder(REQ_IMPORT)
+                0 -> startImport()
                 1 -> { stopPreview(); AttendanceService.start(this, test = true) }
-                2 -> pickFolder(REQ_EXPORT)
+                2 -> startExport()
                 3 -> showResults()
                 4 -> startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                 5 -> moveTaskToBack(true)
@@ -291,57 +300,64 @@ class MainActivity : Activity() {
         ).setPositiveButton("OK", null).show()
     }
 
-    @Suppress("DEPRECATION")
-    private fun pickFolder(request: Int) {
-        val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        )
-        try {
-            startActivityForResult(i, request)
-        } catch (e: Exception) {
-            AlertDialog.Builder(this).setMessage("This board has no folder picker: ${e.message}").setPositiveButton("OK", null).show()
+    // ---------- USB: import and export ----------
+    // The board looks for the SSAS-USB folder by itself (UsbLocator); the system folder picker is only a fallback,
+    // because most boards do not have one.
+
+    private fun hasFolderPicker() = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).resolveActivity(packageManager) != null
+
+    private fun startImport() {
+        if (!hasStorage()) {
+            requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), REQ_STORAGE)
+            return
         }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        val uri = data?.data ?: return
-        if (resultCode != RESULT_OK) return
-        when (requestCode) {
-            REQ_IMPORT -> importFrom(uri)
-            REQ_EXPORT -> exportTo(uri)
-        }
-    }
-
-    private fun progressDialog(title: String): Pair<AlertDialog, TextView> {
-        val tv = TextView(this).apply { setPadding(48, 32, 48, 32); textSize = 18f }
-        val d = AlertDialog.Builder(this).setTitle(title).setView(tv).setCancelable(false).create()
-        d.show()
-        return d to tv
-    }
-
-    private fun importFrom(uri: Uri) {
-        val importer = UsbImporter(this, uri)
+        val (dialog, _) = progressDialog("Looking for the USB stick…")
         Thread {
-            val boards = runCatching { importer.boards() }
+            val found = runCatching { UsbLocator.find(this) }.getOrDefault(emptyList())
             main.post {
-                boards.onFailure { msg(it.message ?: "Could not read the USB") }
-                boards.onSuccess { list ->
-                    if (list.isEmpty()) return@onSuccess msg("No boards found on the USB.")
-                    AlertDialog.Builder(this).setTitle("Which board is this?").setItems(list.toTypedArray()) { _, i ->
-                        install(importer, list[i])
+                dialog.dismiss()
+                when (found.size) {
+                    0 -> notFound()
+                    1 -> openPackage(FileTree(found[0].root))
+                    else -> AlertDialog.Builder(this).setTitle("Which USB stick?")
+                        .setItems(found.map { it.label }.toTypedArray()) { _, i -> openPackage(FileTree(found[i].root)) }
+                        .show()
+                }
+            }
+        }.start()
+    }
+
+    private fun notFound() {
+        val searched = UsbLocator.candidateRoots(this).joinToString("\n") { it.path }
+        val b = AlertDialog.Builder(this).setTitle("No SSAS-USB folder found").setMessage(
+            "Plug in the USB stick made by SSAS Studio (Export to USB), wait a few seconds and try again.\n\n" +
+                "Or copy the SSAS-USB folder into this board's Download folder with its file manager.\n\nSearched:\n$searched"
+        ).setPositiveButton("Try again") { _, _ -> startImport() }.setNegativeButton("Close", null)
+        if (hasFolderPicker()) b.setNeutralButton("Choose folder…") { _, _ -> pickFolder(REQ_IMPORT) }
+        b.show()
+    }
+
+    private fun openPackage(tree: UsbTree) {
+        Thread {
+            val r = runCatching { UsbPackage(tree).let { it to it.boards() } }
+            main.post {
+                r.onFailure { msg(it.message ?: "Could not read the USB stick") }
+                r.onSuccess { (pkg, boards) ->
+                    if (boards.isEmpty()) return@onSuccess msg("No boards found in ${tree.label}.")
+                    AlertDialog.Builder(this).setTitle("Which board is this?").setItems(boards.toTypedArray()) { _, i ->
+                        install(pkg, boards[i])
                     }.show()
                 }
             }
         }.start()
     }
 
-    private fun install(importer: UsbImporter, board: String) {
+    private fun install(pkg: UsbPackage, board: String) {
         stopPreview()
         val (dialog, text) = progressDialog("Importing $board")
         Thread {
             val r = runCatching {
-                importer.install(board, store) { m, f -> main.post { text.text = "$m\n${(f * 100).toInt()}%" } }
+                pkg.install(board, store.configDir, store.modelsDir) { m, f -> main.post { text.text = "$m\n${(f * 100).toInt()}%" } }
             }
             main.post {
                 dialog.dismiss()
@@ -352,15 +368,65 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    private fun exportTo(uri: Uri) {
+    /** Apps may only write into their own folder on a USB stick: <USB>/Android/data/<app>/files/SSAS-Results/<board>. */
+    private fun startExport() {
         val board = store.config()?.board_code ?: "board"
+        val dirs = UsbLocator.writableUsbDirs(this)
+        if (dirs.isEmpty()) {
+            val b = AlertDialog.Builder(this).setMessage("No USB stick found. Plug it in, wait a few seconds and try again.")
+                .setPositiveButton("Try again") { _, _ -> startExport() }.setNegativeButton("Close", null)
+            if (hasFolderPicker()) b.setNeutralButton("Choose folder…") { _, _ -> pickFolder(REQ_EXPORT) }
+            b.show()
+            return
+        }
         Thread {
-            val r = runCatching { UsbImporter(this, uri).exportResults(store, board) }
+            val r = runCatching { UsbPackage.writeResults(dirs[0], board, store.results()) }
             main.post {
-                r.onSuccess { msg("$it result files copied to SSAS-Results/$board on the USB.") }
+                r.onSuccess { dir ->
+                    msg("${store.results().size} result files and summary.csv copied to the USB stick, in:\n\n" +
+                        "Android/data/$packageName/files/SSAS-Results/$board\n\n($dir)")
+                }
                 r.onFailure { msg("Export failed: ${it.message}") }
             }
         }.start()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun pickFolder(request: Int) {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+        try {
+            startActivityForResult(i, request)
+        } catch (e: Exception) {
+            msg("This board has no folder picker: ${e.message}")
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data ?: return
+        if (resultCode != RESULT_OK) return
+        when (requestCode) {
+            REQ_IMPORT -> openPackage(SafTree(this, uri))
+            REQ_EXPORT -> {
+                val board = store.config()?.board_code ?: "board"
+                Thread {
+                    val r = runCatching { SafTree(this, uri).writeResults(board, UsbPackage.resultFiles(store.results())) }
+                    main.post {
+                        r.onSuccess { msg("Results copied to SSAS-Results/$board.") }
+                        r.onFailure { msg("Export failed: ${it.message}") }
+                    }
+                }.start()
+            }
+        }
+    }
+
+    private fun progressDialog(title: String): Pair<AlertDialog, TextView> {
+        val tv = TextView(this).apply { setPadding(48, 32, 48, 32); textSize = 18f }
+        val d = AlertDialog.Builder(this).setTitle(title).setView(tv).setCancelable(false).create()
+        d.show()
+        return d to tv
     }
 
     private fun msg(text: String) {
@@ -371,5 +437,6 @@ class MainActivity : Activity() {
         private const val REQ_PERMS = 1
         private const val REQ_IMPORT = 2
         private const val REQ_EXPORT = 3
+        private const val REQ_STORAGE = 4
     }
 }
