@@ -1,11 +1,11 @@
 """Write the USB folder that the boards import (see docs/data-format.md).
 
-    SSAS-USB/
-        ssas-usb.json
-        ssas-board.apk
-        models/  det_10g.onnx  w600k_r50.onnx  [rtmo-s.onnx]  models.json
-        screens/<board>/board.json  class-<code>.json ...
-        server/boards.json
+SSAS-USB/
+    ssas-usb.json
+    ssas-board.apk
+    models/  det_10g.onnx  w600k_r50.onnx  [rtmo-s.onnx]  models.json
+    screens/<board>/board.json  class-<code>.json ...
+    server/boards.json
 """
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 from .. import __version__
 from . import classmodel
@@ -42,7 +42,7 @@ def board_plans(school: School) -> tuple[dict[str, BoardPlan], list[str]]:
     """Which class each board takes attendance for, in which periods. Returns (plans, problems)."""
     problems: list[str] = []
     plans: dict[str, BoardPlan] = {}
-    labs = {l["code"]: l for l in school.labs}
+    labs = {lab["code"]: lab for lab in school.labs}
     for code in school.class_codes():
         plans[code] = BoardPlan(code, "class", code, {code})
     for code, lab in labs.items():
@@ -83,8 +83,14 @@ def _copy_if_changed(src: Path, dst: Path, sha: str) -> None:
     tmp.replace(dst)
 
 
-def export_usb(school: School, target: Path, boards: list[str], models_dir: Path, apk: Path | None,
-               progress: ProgressFn | None = None) -> dict:
+def export_usb(
+    school: School,
+    target: Path,
+    boards: list[str],
+    models_dir: Path,
+    apk: Path | None,
+    progress: ProgressFn | None = None,
+) -> dict:
     """Export the chosen boards to ``target``/SSAS-USB. Returns a summary dict."""
     plans, problems = board_plans(school)
     missing = [b for b in boards if b not in plans]
@@ -134,8 +140,14 @@ def export_usb(school: School, target: Path, boards: list[str], models_dir: Path
             model = classmodel.read(school.model_dir(code) / "class-model.json")
             name = f"class-{code}.json"
             classmodel.write(folder / name, model)
-            class_files.append({"class_code": code, "file": name, "sha256": sha256_file(folder / name),
-                                "students": len(model["students"])})
+            class_files.append(
+                {
+                    "class_code": code,
+                    "file": name,
+                    "sha256": sha256_file(folder / name),
+                    "students": len(model["students"]),
+                }
+            )
         token = school.board_token(b)
         board = {
             "format": BOARD_FORMAT,
@@ -162,14 +174,19 @@ def export_usb(school: School, target: Path, boards: list[str], models_dir: Path
             "sound": st.sound,
         }
         (folder / "board.json").write_text(json.dumps(board, ensure_ascii=False, indent=2), encoding="utf-8")
-        server_boards.append({
-            "board_code": b, "kind": plan.kind, "name": plan.name, "classes": sorted(plan.classes),
-            "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
-            "students": {
-                code: [s for s in classmodel.read(school.model_dir(code) / "class-model.json")["students"]]
-                for code in sorted(plan.classes)
-            },
-        })
+        server_boards.append(
+            {
+                "board_code": b,
+                "kind": plan.kind,
+                "name": plan.name,
+                "classes": sorted(plan.classes),
+                "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
+                "students": {
+                    code: list(classmodel.read(school.model_dir(code) / "class-model.json")["students"])
+                    for code in sorted(plan.classes)
+                },
+            }
+        )
 
     existing = []
     sb_path = root / "server" / "boards.json"
@@ -180,12 +197,25 @@ def export_usb(school: School, target: Path, boards: list[str], models_dir: Path
             existing = []
     merged = {e["board_code"]: e for e in existing}
     merged.update({e["board_code"]: e for e in server_boards})
-    sb_path.write_text(json.dumps({"format": "ssas.server-boards", "version": 1, "school_name": school.name,
-                                   "boards": sorted(merged.values(), key=lambda e: e["board_code"])},
-                                  ensure_ascii=False, indent=2), encoding="utf-8")
+    sb_path.write_text(
+        json.dumps(
+            {
+                "format": "ssas.server-boards",
+                "version": 1,
+                "school_name": school.name,
+                "boards": sorted(merged.values(), key=lambda e: e["board_code"]),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     index = {
-        "format": "ssas.usb", "version": 1, "school_name": school.name, "exported_at": now_iso(),
+        "format": "ssas.usb",
+        "version": 1,
+        "school_name": school.name,
+        "exported_at": now_iso(),
         "studio_version": __version__,
         "boards": sorted({p.name for p in (root / "screens").iterdir() if (p / "board.json").exists()}),
         "app": "ssas-board.apk" if (root / "ssas-board.apk").exists() else None,

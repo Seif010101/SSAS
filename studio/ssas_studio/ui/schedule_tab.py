@@ -4,16 +4,34 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QListWidget,
-    QPushButton, QTableWidget, QTimeEdit, QVBoxLayout, QWidget, QScrollArea,
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QInputDialog,
+    QLabel,
+    QListWidget,
+    QPushButton,
+    QScrollArea,
+    QTableWidget,
+    QTimeEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..core.export import board_plans
 from ..core.storage import DAY_NAMES, PERIOD_KINDS
-from .common import confirm, danger, error, info, muted, primary, title
+from .common import ClassPicker, confirm, danger, error, info, muted, primary, title
 from .context import AppContext
 
-KIND_LABELS = {"class": "Lesson (counted)", "break": "Break", "assembly": "Assembly", "pe": "PE / sports", "other": "Other (not counted)"}
+KIND_LABELS = {
+    "class": "Lesson (counted)",
+    "break": "Break",
+    "assembly": "Assembly",
+    "pe": "PE / sports",
+    "other": "Other (not counted)",
+}
 HERE = "Here"
 SKIP = "Not counted"
 
@@ -30,10 +48,12 @@ class ScheduleTab(QWidget):
         scroll.setWidget(inner)
         root = QVBoxLayout(inner)
         root.addWidget(title("Schedule"))
-        root.addWidget(muted(
-            "Each board reads its own timetable from the USB. The camera opens a few minutes after a counted "
-            "lesson starts, takes attendance once, then closes. Breaks, assembly and PE are never counted."
-        ))
+        root.addWidget(
+            muted(
+                "Each board reads its own timetable from the USB. The camera opens a few minutes after a counted "
+                "lesson starts, takes attendance once, then closes. Breaks, assembly and PE are never counted."
+            )
+        )
 
         top = QHBoxLayout()
         days = QGroupBox("School days")
@@ -93,8 +113,8 @@ class ScheduleTab(QWidget):
         tt = QGroupBox("Weekly timetable of a class")
         tl = QVBoxLayout(tt)
         tr = QHBoxLayout()
-        self.class_box = QComboBox()
-        self.class_box.currentTextChanged.connect(self.load_timetable)
+        self.class_box = ClassPicker(ctx)
+        self.class_box.changed.connect(self.load_timetable)
         tr.addWidget(QLabel("Class"))
         tr.addWidget(self.class_box, 1)
         copy_t = QPushButton("Copy to all classes")
@@ -105,8 +125,12 @@ class ScheduleTab(QWidget):
         tr.addWidget(copy_t)
         tr.addWidget(save_t)
         tl.addLayout(tr)
-        tl.addWidget(muted(f"“{HERE}” = the class's own board takes attendance. “{SKIP}” (amber) = PE or another lesson "
-                           "outside a room with a board. “In LAB…” (teal) = the lab's board takes attendance."))
+        tl.addWidget(
+            muted(
+                f"“{HERE}” = the class's own board takes attendance. “{SKIP}” (amber) = PE or another lesson "
+                "outside a room with a board. “In LAB…” (teal) = the lab's board takes attendance."
+            )
+        )
         self.tt_table = QTableWidget(0, 0)
         self.tt_table.setMinimumHeight(300)
         self.tt_table.verticalHeader().setDefaultSectionSize(38)
@@ -127,19 +151,12 @@ class ScheduleTab(QWidget):
             cb.setChecked(d in school.school_days)
             cb.blockSignals(False)
         self.lab_list.clear()
-        for l in school.labs:
-            self.lab_list.addItem(f"{l['code']} — {l['name']}")
+        for lab in school.labs:
+            self.lab_list.addItem(f"{lab['code']} — {lab['name']}")
         self.bell_table.setRowCount(0)
         for row in school.bell:
             self._add_bell_row(row)
-        cur = self.class_box.currentText()
-        self.class_box.blockSignals(True)
-        self.class_box.clear()
-        self.class_box.addItems(school.class_codes())
-        if cur:
-            self.class_box.setCurrentText(cur)
-        self.class_box.blockSignals(False)
-        self.load_timetable(self.class_box.currentText())
+        self.load_timetable(self.class_box.code)
 
     def _add_bell_row(self, row: dict):
         r = self.bell_table.rowCount()
@@ -175,8 +192,14 @@ class ScheduleTab(QWidget):
         start = QTime(8, 0)
         if count:
             start = self.bell_table.cellWidget(count - 1, 2).time().addSecs(5 * 60)
-        self._add_bell_row({"number": 0, "start": start.toString("HH:mm"),
-                            "end": start.addSecs(45 * 60).toString("HH:mm"), "kind": "class"})
+        self._add_bell_row(
+            {
+                "number": 0,
+                "start": start.toString("HH:mm"),
+                "end": start.addSecs(45 * 60).toString("HH:mm"),
+                "kind": "class",
+            }
+        )
         self.bell_table.selectRow(count)
 
     def remove_bell_row(self):
@@ -198,7 +221,7 @@ class ScheduleTab(QWidget):
         if not code:
             return
         c = school.load_class(code)
-        labs = [l["code"] for l in school.labs]
+        labs = [lab["code"] for lab in school.labs]
         for r, p in enumerate(periods):
             for col, d in enumerate(days):
                 box = QComboBox()
@@ -228,14 +251,20 @@ class ScheduleTab(QWidget):
     # ----- save -----
     def save_days(self):
         self.ctx.school.school_days = [d for d, cb in self.day_boxes.items() if cb.isChecked()]
-        self.load_timetable(self.class_box.currentText())
+        self.load_timetable(self.class_box.code)
 
     def save_bell(self):
         rows = []
         for r in range(self.bell_table.rowCount()):
             _, start, end, kind = (self.bell_table.cellWidget(r, c) for c in range(4))
-            rows.append({"number": 0, "start": start.time().toString("HH:mm"),
-                         "end": end.time().toString("HH:mm"), "kind": kind.currentData()})
+            rows.append(
+                {
+                    "number": 0,
+                    "start": start.time().toString("HH:mm"),
+                    "end": end.time().toString("HH:mm"),
+                    "kind": kind.currentData(),
+                }
+            )
         rows.sort(key=lambda x: x["start"])
         n = 0
         for row in rows:
@@ -250,7 +279,7 @@ class ScheduleTab(QWidget):
         info(self, "Bell times saved.")
 
     def save_timetable(self, quiet: bool = False):
-        code = self.class_box.currentText()
+        code = self.class_box.code
         if not code:
             return
         school = self.ctx.school
@@ -268,12 +297,15 @@ class ScheduleTab(QWidget):
             info(self, f"Timetable of {code} saved.")
 
     def copy_timetable(self):
-        code = self.class_box.currentText()
+        code = self.class_box.code
         codes = [c for c in self.ctx.school.class_codes() if c != code]
         if not code or not codes:
             return error(self, "There is no other class to copy to.")
-        if not confirm(self, f"Give all {len(codes)} other classes the same timetable as {code}?\n"
-                             "Their current timetables will be replaced."):
+        if not confirm(
+            self,
+            f"Give all {len(codes)} other classes the same timetable as {code}?\n"
+            "Their current timetables will be replaced.",
+        ):
             return
         self.save_timetable(quiet=True)
         tt = self.ctx.school.load_class(code).timetable

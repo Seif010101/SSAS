@@ -1,6 +1,6 @@
 [project]
 name = "ssas-studio"
-version = "0.1.1"
+version = "0.1.2"
 description = "SSAS Studio: capture students, train one face model per class, export to USB for the classroom boards."
 requires-python = ">=3.11"
 dependencies = [
@@ -13,10 +13,27 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "scikit-image>=0.24"]
+dev = ["pytest>=8", "scikit-image>=0.24", "ruff>=0.17"]
 
 [project.gui-scripts]
 ssas-studio = "ssas_studio.app:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = [
+    "E501",  # long lines: the formatter handles code, and strings (style sheet, texts) may be long
+    "B008",
+    "SIM105",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "SIM117"]
+"ssas_studio/ui/*" = ["N802"]  # Qt overrides are camelCase

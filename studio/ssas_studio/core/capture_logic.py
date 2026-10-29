@@ -121,8 +121,14 @@ class CaptureSession:
             self.blink_done = True
 
     # ----- main step -----
-    def update(self, face_widths: list[float], yaw: float | None, pitch: float | None,
-               openness: float | None, quality_problem: str | None) -> Feedback:
+    def update(
+        self,
+        face_widths: list[float],
+        yaw: float | None,
+        pitch: float | None,
+        openness: float | None,
+        quality_problem: str | None,
+    ) -> Feedback:
         """Call once per camera frame. ``yaw`` is in camera space (positive = nose to image right)."""
         if not face_widths:
             return Feedback("Look at the camera", target=self.current_target, blocked=True)
@@ -168,45 +174,3 @@ class CaptureSession:
         if self.segments_done == RING_SEGMENTS - 1 and self.require_blink and not self.blink_done:
             return "Good — and blink once"
         return "Good — keep turning"
-
-
-@dataclass
-class AutoStart:
-    """Decides when to begin capturing the next student: one clear face, held steady for a moment.
-
-    After a student is finished the previous face has to leave the picture first, so the same
-    person is not captured twice by accident.
-    """
-
-    hold_s: float = 1.0
-    absent_s: float = 0.5
-    min_face_px: float = 110.0
-    need_absence: bool = False
-    _since: float | None = None
-    _gone_since: float | None = None
-
-    def rearm(self) -> None:
-        self.need_absence = True
-        self._since = None
-        self._gone_since = None
-
-    def update(self, face_widths: list[float], now: float) -> tuple[float, bool]:
-        """Returns (how far the hold is, 0..1, ready to start)."""
-        if not face_widths:
-            self._since = None
-            if self.need_absence:
-                if self._gone_since is None:
-                    self._gone_since = now
-                elif now - self._gone_since >= self.absent_s:
-                    self.need_absence = False
-            return 0.0, False
-        self._gone_since = None
-        main = max(face_widths)
-        crowded = sum(1 for w in face_widths if w >= SECOND_FACE_RATIO * main) > 1
-        if self.need_absence or crowded or main < self.min_face_px:
-            self._since = None
-            return 0.0, False
-        if self._since is None:
-            self._since = now
-        frac = min(1.0, (now - self._since) / self.hold_s)
-        return frac, frac >= 1.0

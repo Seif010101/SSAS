@@ -5,9 +5,24 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QHeaderView, QInputDialog,
-    QLineEdit, QListWidget, QListWidgetItem, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
-    QAbstractItemView, QGroupBox,
+    QAbstractItemView,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QInputDialog,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..core.storage import import_students, valid_code
@@ -185,7 +200,9 @@ class ClassesTab(QWidget):
         school = self.ctx.school
         c = school.load_class(code)
         self.class_title.setText(f"Class {code}")
-        self.class_info.setText(f"Grade {c.grade} · {c.track} · Section {c.section}" + (f" · {c.room}" if c.room else ""))
+        self.class_info.setText(
+            f"Grade {c.grade} · {c.track} · Section {c.section}" + (f" · {c.room}" if c.room else "")
+        )
         report = school.report(code)
         recall = {s["id"]: s.get("recall") for s in (report or {}).get("students", [])}
         target = school.settings.photos_per_student
@@ -241,7 +258,9 @@ class ClassesTab(QWidget):
         if not code:
             return
         c = self.ctx.school.load_class(code)
-        dlg = ClassDialog(self, {"code": c.code, "grade": c.grade, "track": c.track, "section": c.section, "room": c.room})
+        dlg = ClassDialog(
+            self, {"code": c.code, "grade": c.grade, "track": c.track, "section": c.section, "room": c.room}
+        )
         if dlg.exec() != QDialog.Accepted:
             return
         v = dlg.values()
@@ -251,7 +270,9 @@ class ClassesTab(QWidget):
 
     def delete_class(self):
         code = self.current_code()
-        if code and confirm(self, f"Delete class {code} with ALL its students, photos and model? This cannot be undone."):
+        if code and confirm(
+            self, f"Delete class {code} with ALL its students, photos and model? This cannot be undone."
+        ):
             self.ctx.school.delete_class(code)
             self.ctx.classes_changed.emit()
 

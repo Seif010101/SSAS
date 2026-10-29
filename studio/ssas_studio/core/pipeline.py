@@ -5,14 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import cv2
 import numpy as np
 
 from .. import __version__
+from ..logs import get_logger
 from . import classmodel
 from .align import norm_crop
 from .augment import augment
@@ -23,6 +24,7 @@ from .models import MODELS, gpu_name, make_session, model_path, sha256_file
 from .storage import School, now_iso
 from .train import Cancelled, Dataset, TrainConfig, find_lookalikes, train_class
 
+log = get_logger("pipeline")
 ProgressFn = Callable[[str, float], None]
 CancelFn = Callable[[], bool]
 
@@ -35,17 +37,28 @@ class FaceEngine:
 
     def __init__(self, models_dir: Path, prefer_gpu: bool = True, with_landmarks: bool = True):
         self.models_dir = Path(models_dir)
+        embedder_path = model_path(self.models_dir, "embedder")
         det_s = make_session(model_path(self.models_dir, "detector"), prefer_gpu=False)
-        emb_s = make_session(model_path(self.models_dir, "embedder"), prefer_gpu=prefer_gpu)
+        emb_s = make_session(embedder_path, prefer_gpu=prefer_gpu)
+        on_gpu = gpu_name(emb_s) != "CPU"
         self.detector = FaceDetector(det_s)
-        self.embedder = FaceEmbedder(emb_s)
+        self.embedder = FaceEmbedder(
+            emb_s,
+            pad_to=32 if on_gpu else None,
+            cpu_fallback=(lambda: make_session(embedder_path, prefer_gpu=False)) if on_gpu else None,
+        )
         self.landmarks = (
             LandmarkModel(make_session(model_path(self.models_dir, "landmarks"), prefer_gpu=False))
             if with_landmarks and model_path(self.models_dir, "landmarks").exists()
             else None
         )
-        self.device = gpu_name(emb_s)
         self._sha: dict[str, str] = {}
+        log.info("Face models loaded; recognition runs on: %s", self.device)
+
+    @property
+    def device(self) -> str:
+        """Where the embedder runs now ("CPU", "GPU (DirectML)"...). Changes if the GPU fails and we fall back."""
+        return gpu_name(self.embedder.session)
 
     def model_info(self, key: str) -> dict:
         if key not in self._sha:
@@ -72,8 +85,12 @@ def _photo_key(paths: list[Path]) -> str:
 
 
 def build_class_embeddings(
-    school: School, code: str, engine: FaceEngine, augment_per_photo: int,
-    progress: ProgressFn | None = None, cancel: CancelFn | None = None,
+    school: School,
+    code: str,
+    engine: FaceEngine,
+    augment_per_photo: int,
+    progress: ProgressFn | None = None,
+    cancel: CancelFn | None = None,
 ) -> tuple[Dataset, list[dict], list[PhotoProblem]]:
     """Detect, align, augment and embed every photo of the class (cached in model/embeddings.npz)."""
     c = school.load_class(code)
@@ -123,7 +140,12 @@ def build_class_embeddings(
     ds = Dataset(emb.astype(np.float32), np.array(labels, np.int64), np.array(groups, np.int64), len(students))
     cache.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
-        cache, key=np.array(key), emb=ds.emb, label=ds.label, group=ds.group, aug=np.array(is_aug, np.int8),
+        cache,
+        key=np.array(key),
+        emb=ds.emb,
+        label=ds.label,
+        group=ds.group,
+        aug=np.array(is_aug, np.int8),
         ids=np.array([s.id for s in students]),
         problems=np.array([[p.student, p.photo, p.problem] for p in problems] or np.zeros((0, 3)), dtype=str),
     )
@@ -173,11 +195,13 @@ def school_centroids(school: School) -> dict[str, np.ndarray]:
     return out
 
 
-def train_and_save(school: School, code: str, engine: FaceEngine,
-                   progress: ProgressFn | None = None, cancel: CancelFn | None = None) -> dict:
+def train_and_save(
+    school: School, code: str, engine: FaceEngine, progress: ProgressFn | None = None, cancel: CancelFn | None = None
+) -> dict:
     """Build embeddings, train, and write model/class-model.json + model/report.json."""
     started = time.time()
     st = school.settings
+    log.info("Training %s on %s", code, engine.device)
     cfg = TrainConfig(epochs=st.epochs, folds=st.folds, seeds=st.seeds, min_accuracy=st.min_accuracy)
 
     def sub(lo, hi):
@@ -189,6 +213,7 @@ def train_and_save(school: School, code: str, engine: FaceEngine,
     if ds.num_students == 1:
         raise ValueError("At least two students with photos are needed to train a class model.")
     ds.neg, ds.neg_group = stranger_embeddings(school, code, np.random.default_rng(7))
+    log.info("%s: %d students, %d samples, %d strangers", code, ds.num_students, len(ds.emb), len(ds.neg))
     result = train_class(ds, cfg, sub(0.4, 1.0), cancel)
 
     model = classmodel.build(
@@ -206,14 +231,13 @@ def train_and_save(school: School, code: str, engine: FaceEngine,
 
     photo_counts = {s["id"]: 0 for s in students}
     groups_per_student: dict[int, set] = {}
-    for lbl, grp in zip(ds.label.tolist(), ds.group.tolist()):
+    for lbl, grp in zip(ds.label.tolist(), ds.group.tolist(), strict=True):
         groups_per_student.setdefault(lbl, set()).add(grp)
     for i, s in enumerate(students):
         photo_counts[s["id"]] = len(groups_per_student.get(i, ()))
 
     lookalikes = [
-        {"a": a, "b": b, "similarity": round(sim, 3)}
-        for a, b, sim in find_lookalikes(school_centroids(school))
+        {"a": a, "b": b, "similarity": round(sim, 3)} for a, b, sim in find_lookalikes(school_centroids(school))
     ]
     report = {
         "class_code": code,
@@ -228,12 +252,17 @@ def train_and_save(school: School, code: str, engine: FaceEngine,
         "thresholds": model["thresholds"],
         "metrics": result.metrics,
         "students": [
-            {"id": s["id"], "name": s["name"], "photos": photo_counts[s["id"]],
-             "recall": round(result.per_student_recall[i], 4) if i < len(result.per_student_recall) else None}
+            {
+                "id": s["id"],
+                "name": s["name"],
+                "photos": photo_counts[s["id"]],
+                "recall": round(result.per_student_recall[i], 4) if i < len(result.per_student_recall) else None,
+            }
             for i, s in enumerate(students)
         ],
         "weak_students": [
-            s["name"] for i, s in enumerate(students)
+            s["name"]
+            for i, s in enumerate(students)
             if i < len(result.per_student_recall) and result.per_student_recall[i] < 0.9
         ],
         "photo_problems": [p.__dict__ for p in problems],
@@ -243,5 +272,12 @@ def train_and_save(school: School, code: str, engine: FaceEngine,
     }
     (school.model_dir(code) / "report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    log.info(
+        "Trained %s: accuracy %.3f on %s in %.0f s",
+        code,
+        result.metrics["accuracy"],
+        report["device"],
+        report["duration_s"],
     )
     return report

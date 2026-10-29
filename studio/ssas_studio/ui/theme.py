@@ -102,10 +102,19 @@ def light_palette() -> QPalette:
     """The same colours for the widgets the style sheet does not reach (e.g. native dialogs)."""
     pal = QPalette()
     for role, col in (
-        (QPalette.Window, BG), (QPalette.WindowText, TEXT), (QPalette.Base, SURFACE), (QPalette.AlternateBase, SURFACE_MUTED),
-        (QPalette.Text, TEXT), (QPalette.Button, SURFACE), (QPalette.ButtonText, TEXT), (QPalette.ToolTipBase, TEXT),
-        (QPalette.ToolTipText, "#ffffff"), (QPalette.Highlight, PRIMARY), (QPalette.HighlightedText, "#ffffff"),
-        (QPalette.PlaceholderText, "#94a3b8"), (QPalette.BrightText, "#ffffff"),
+        (QPalette.Window, BG),
+        (QPalette.WindowText, TEXT),
+        (QPalette.Base, SURFACE),
+        (QPalette.AlternateBase, SURFACE_MUTED),
+        (QPalette.Text, TEXT),
+        (QPalette.Button, SURFACE),
+        (QPalette.ButtonText, TEXT),
+        (QPalette.ToolTipBase, TEXT),
+        (QPalette.ToolTipText, "#ffffff"),
+        (QPalette.Highlight, PRIMARY),
+        (QPalette.HighlightedText, "#ffffff"),
+        (QPalette.PlaceholderText, "#94a3b8"),
+        (QPalette.BrightText, "#ffffff"),
     ):
         pal.setColor(role, QColor(col))
     for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
@@ -175,6 +184,8 @@ def icon_pixmap(size: int) -> QPixmap:
     pen = QPen(QColor("white"), max(1.5, size * 0.09), Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
     p.setPen(pen)
     p.drawEllipse(QRectF(size * 0.2, size * 0.2, size * 0.6, size * 0.6))
-    p.drawPolyline([QPointF(size * 0.36, size * 0.52), QPointF(size * 0.46, size * 0.62), QPointF(size * 0.65, size * 0.41)])
+    p.drawPolyline(
+        [QPointF(size * 0.36, size * 0.52), QPointF(size * 0.46, size * 0.62), QPointF(size * 0.65, size * 0.41)]
+    )
     p.end()
     return pm

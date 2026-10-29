@@ -44,8 +44,15 @@ c_face = det.detect(camera, detect_size_for(camera.shape))[0]
 a_emb = emb.embed([norm_crop(astro, a_face.kps)])[0]
 c_emb = emb.embed([norm_crop(camera, c_face.kps)])[0]
 model = classmodel.build(
-    "TEST", [{"id": "T-001", "name": "Astronaut"}, {"id": "T-002", "name": "Camera Man"}],
-    np.stack([a_emb, c_emb]), {"accept": 0.3, "strong": 0.6, "margin": 0.05}, {}, "prototype", {}, "2026-01-01T00:00:00", "test",
+    "TEST",
+    [{"id": "T-001", "name": "Astronaut"}, {"id": "T-002", "name": "Camera Man"}],
+    np.stack([a_emb, c_emb]),
+    {"accept": 0.3, "strong": 0.6, "margin": 0.05},
+    {},
+    "prototype",
+    {},
+    "2026-01-01T00:00:00",
+    "test",
 )
 classmodel.write(out / "class-TEST.json", model)
 

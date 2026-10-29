@@ -23,8 +23,17 @@ def decode_matrix(d: dict) -> np.ndarray:
     return np.frombuffer(base64.b64decode(d["data"]), dtype="<f4").reshape(d["shape"]).copy()
 
 
-def build(class_code: str, students: list[dict], weights: np.ndarray, thresholds: dict, metrics: dict,
-          method: str, models: dict, created_at: str, studio_version: str) -> dict:
+def build(
+    class_code: str,
+    students: list[dict],
+    weights: np.ndarray,
+    thresholds: dict,
+    metrics: dict,
+    method: str,
+    models: dict,
+    created_at: str,
+    studio_version: str,
+) -> dict:
     if weights.shape[0] != len(students):
         raise ValueError("One weight row per student is required")
     return {

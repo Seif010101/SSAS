@@ -1,16 +1,16 @@
 """School data on the laptop: plain folders and JSON files.
 
-    <data root>/
-        school.json                     school name, days, bell times, settings, labs
-        screens/
-            9A1/
-                class.json              class info, students, timetable
-                Ahmed Ali/              one folder per student with their photos
-                    20261026-101500-03-left.jpg
-                model/
-                    class-model.json    the trained model for this class only
-                    report.json         training report
-                    embeddings.npz      cached embeddings (used as "strangers" for other classes)
+<data root>/
+    school.json                     school name, days, bell times, settings, labs
+    screens/
+        9A1/
+            class.json              class info, students, timetable
+            Ahmed Ali/              one folder per student with their photos
+                20261026-101500-03-left.jpg
+            model/
+                class-model.json    the trained model for this class only
+                report.json         training report
+                embeddings.npz      cached embeddings (used as "strangers" for other classes)
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def valid_code(code: str) -> bool:
 def _read_json(path: Path, default):
     if not path.exists():
         return default
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -121,7 +121,7 @@ class SchoolClass:
         return d
 
     @staticmethod
-    def from_json(d: dict) -> "SchoolClass":
+    def from_json(d: dict) -> SchoolClass:
         return SchoolClass(
             code=d["code"],
             grade=int(d.get("grade", 0)),
@@ -206,13 +206,13 @@ class School:
     def add_lab(self, code: str, name: str) -> None:
         if not valid_code(code):
             raise ValueError("Lab code may contain letters, digits, - and _ only (max 16).")
-        if code in self.class_codes() or any(l["code"] == code for l in self.labs):
+        if code in self.class_codes() or any(lab["code"] == code for lab in self.labs):
             raise ValueError(f"The code {code} is already used.")
         self._school.setdefault("labs", []).append({"code": code, "name": name})
         self.save_school()
 
     def remove_lab(self, code: str) -> None:
-        self._school["labs"] = [l for l in self.labs if l["code"] != code]
+        self._school["labs"] = [lab for lab in self.labs if lab["code"] != code]
         self.save_school()
 
     @property
@@ -257,7 +257,7 @@ class School:
     def add_class(self, code: str, grade: int, track: str, section: int, room: str = "") -> SchoolClass:
         if not valid_code(code):
             raise ValueError("Class code may contain letters, digits, - and _ only (max 16), e.g. 9A1.")
-        if (self.class_dir(code) / "class.json").exists() or any(l["code"] == code for l in self.labs):
+        if (self.class_dir(code) / "class.json").exists() or any(lab["code"] == code for lab in self.labs):
             raise ValueError(f"The code {code} is already used.")
         c = SchoolClass(code=code, grade=grade, track=track, section=section, room=room)
         self.save_class(c)
@@ -339,7 +339,7 @@ def import_students(path: Path) -> list[str]:
     else:
         import csv
 
-        with open(path, "r", encoding="utf-8-sig", newline="") as f:
+        with open(path, encoding="utf-8-sig", newline="") as f:
             for row in csv.reader(f):
                 if row and row[0].strip():
                     names.append(row[0])

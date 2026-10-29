@@ -13,11 +13,15 @@ import os
 import shutil
 import urllib.request
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import onnxruntime as ort
+
+from ..logs import get_logger
+
+log = get_logger("models")
 
 BUFFALO_L_URL = "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip"
 BUFFALO_L_SHA256 = "80ffe37d8a5940d59a7384c201a2a38d4741f2f3c51eef46ebb28218a7b0ca2f"
@@ -40,23 +44,36 @@ class ModelFile:
 
 MODELS: dict[str, ModelFile] = {
     "detector": ModelFile(
-        "detector", "det_10g.onnx",
+        "detector",
+        "det_10g.onnx",
         "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91",
-        "Face detection (SCRFD-10G) with 5 landmarks", True, True,
+        "Face detection (SCRFD-10G) with 5 landmarks",
+        True,
+        True,
     ),
     "embedder": ModelFile(
-        "embedder", "w600k_r50.onnx",
+        "embedder",
+        "w600k_r50.onnx",
         "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43",
-        "Face recognition (ArcFace R50, 512-d)", True, True,
+        "Face recognition (ArcFace R50, 512-d)",
+        True,
+        True,
     ),
     "landmarks": ModelFile(
-        "landmarks", "2d106det.onnx",
+        "landmarks",
+        "2d106det.onnx",
         "f001b856447c413801ef5c42091ed0cd516fcd21f2d6b79635b1e733a7109dbf",
-        "106 face landmarks (blink check while capturing)", True, False,
+        "106 face landmarks (blink check while capturing)",
+        True,
+        False,
     ),
     "pose": ModelFile(
-        "pose", "rtmo-s.onnx", None,
-        "Body pose (RTMO-s) for the board's stick figures and head count", False, True,
+        "pose",
+        "rtmo-s.onnx",
+        None,
+        "Body pose (RTMO-s) for the board's stick figures and head count",
+        False,
+        True,
     ),
 }
 
@@ -169,7 +186,13 @@ def make_session(path: Path, prefer_gpu: bool = True, threads: int = 0) -> ort.I
         # DirectML requires these settings.
         opts.enable_mem_pattern = False
         opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-    return ort.InferenceSession(str(path), sess_options=opts, providers=providers)
+    try:
+        return ort.InferenceSession(str(path), sess_options=opts, providers=providers)
+    except Exception:
+        if providers == ["CPUExecutionProvider"]:
+            raise
+        log.exception("Could not open %s on the GPU; using the CPU", Path(path).name)
+        return make_session(path, prefer_gpu=False, threads=threads)
 
 
 def gpu_name(session: ort.InferenceSession) -> str:

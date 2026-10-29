@@ -23,8 +23,13 @@ def face_region(img_bgr: np.ndarray, box: np.ndarray) -> np.ndarray:
     return img_bgr[y1:y2, x1:x2]
 
 
-def check_face(img_bgr: np.ndarray, box: np.ndarray, min_face_px: int = 120,
-               min_sharpness: float = 40.0, brightness_range: tuple[float, float] = (60.0, 210.0)) -> str | None:
+def check_face(
+    img_bgr: np.ndarray,
+    box: np.ndarray,
+    min_face_px: int = 120,
+    min_sharpness: float = 40.0,
+    brightness_range: tuple[float, float] = (60.0, 210.0),
+) -> str | None:
     """Return a short problem description, or None when the face is good to save."""
     width = float(box[2] - box[0])
     if width < min_face_px:

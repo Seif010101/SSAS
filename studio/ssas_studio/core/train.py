@@ -13,8 +13,8 @@ acceptance threshold is calibrated so strangers are accepted at most
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 import numpy as np
 
@@ -214,9 +214,15 @@ def _calibrate(pooled: _Pooled, cfg: TrainConfig) -> tuple[float, float, dict, l
     return accept, strong, metrics, recall
 
 
-def cross_validate(ds: Dataset, cfg: TrainConfig, method: str, progress: ProgressFn | None = None,
-                   cancel: CancelFn | None = None, done_units: list[int] | None = None,
-                   total_units: int = 1) -> tuple[float, float, dict, list[float]]:
+def cross_validate(
+    ds: Dataset,
+    cfg: TrainConfig,
+    method: str,
+    progress: ProgressFn | None = None,
+    cancel: CancelFn | None = None,
+    done_units: list[int] | None = None,
+    total_units: int = 1,
+) -> tuple[float, float, dict, list[float]]:
     pooled = _Pooled()
     seeds = cfg.seeds if method == "head" else 1
     for seed in range(seeds):
@@ -230,16 +236,20 @@ def cross_validate(ds: Dataset, cfg: TrainConfig, method: str, progress: Progres
             neg_val = neg_folds[k]
             neg_train = np.setdiff1d(np.arange(len(ds.neg)), neg_val)
 
-            def tick():
+            def tick(seed=seed, k=k):
                 if cancel and cancel():
                     raise Cancelled()
                 if done_units is not None:
                     done_units[0] += 1
                     if progress:
-                        progress(f"Cross-validation ({method}), seed {seed + 1}, fold {k + 1}", done_units[0] / total_units)
+                        progress(
+                            f"Cross-validation ({method}), seed {seed + 1}, fold {k + 1}", done_units[0] / total_units
+                        )
 
             if method == "head":
-                w = train_head(ds.emb[train], ds.label[train], ds.num_students, ds.neg[neg_train], cfg, seed * 100 + k, tick)
+                w = train_head(
+                    ds.emb[train], ds.label[train], ds.num_students, ds.neg[neg_train], cfg, seed * 100 + k, tick
+                )
             else:
                 w = class_means(ds.emb[train], ds.label[train], ds.num_students)
                 tick()
@@ -247,8 +257,9 @@ def cross_validate(ds: Dataset, cfg: TrainConfig, method: str, progress: Progres
     return _calibrate(pooled, cfg)
 
 
-def train_class(ds: Dataset, cfg: TrainConfig, progress: ProgressFn | None = None,
-                cancel: CancelFn | None = None) -> TrainResult:
+def train_class(
+    ds: Dataset, cfg: TrainConfig, progress: ProgressFn | None = None, cancel: CancelFn | None = None
+) -> TrainResult:
     """Cross-validate both methods, keep the better one, then train it on all photos."""
     if ds.num_students < 1:
         raise ValueError("The class has no students with usable photos.")
@@ -267,6 +278,7 @@ def train_class(ds: Dataset, cfg: TrainConfig, progress: ProgressFn | None = Non
     if method == "head":
         runs = []
         for seed in range(cfg.seeds):
+
             def tick(seed=seed):
                 if cancel and cancel():
                     raise Cancelled()
@@ -283,8 +295,8 @@ def train_class(ds: Dataset, cfg: TrainConfig, progress: ProgressFn | None = Non
 
     metrics = dict(metrics)
     metrics["method_scores"] = {
-        "head": {k: v for k, v in head_cv[2].items()},
-        "prototype": {k: v for k, v in proto_cv[2].items()},
+        "head": dict(head_cv[2]),
+        "prototype": dict(proto_cv[2]),
     }
     metrics["passed"] = metrics["accuracy"] >= cfg.min_accuracy
     return TrainResult(method, weights, accept, strong, cfg.decision_margin, metrics, recall)

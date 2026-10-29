@@ -14,7 +14,7 @@ admin laptop. No photo ever leaves the board, and the server never sees or analy
 
 | Folder | What | Download |
 |---|---|---|
-| [`studio/`](studio) | **SSAS Studio**: capture student photos, train one model per class, enter the timetable, export to USB | `SSAS-Studio-Setup-<version>.exe` |
+| [`studio/`](studio) | **SSAS Studio**: capture student photos, train one model per class, enter the timetable, export to USB ([developer guide](studio/README.md)) | `SSAS-Studio-Setup-<version>.exe` |
 | [`board-app/`](board-app) | **SSAS Board**: the Android app for the classroom/lab boards | `ssas-board.apk` |
 | [`server/`](server) | **SSAS Server**: receives the boards' results; admin login with password + authenticator code | `ssas-server.tar.gz` |
 | [`web/`](web) | Teacher page (look only, not connected yet) | — |

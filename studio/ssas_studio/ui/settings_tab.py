@@ -5,14 +5,27 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
-    QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..core.models import MODELS, available_providers, download_models, verify_models
+from ..logs import log_path
 from .common import confirm, error, info, muted, open_folder, primary, title
 from .context import AppContext
-from .workers import start_job
+from .workers import run_job
 
 
 class SettingsTab(QWidget):
@@ -45,9 +58,17 @@ class SettingsTab(QWidget):
         mr.addWidget(self.dl_btn)
         mr.addWidget(open_m)
         mr.addStretch(1)
+        open_log = QPushButton("Open log folder")
+        open_log.setToolTip("studio.log records errors. Send it when asking for help.")
+        open_log.clicked.connect(lambda: open_folder(log_path().parent))
+        mr.addWidget(open_log)
         ml.addLayout(mr)
-        ml.addWidget(muted("The face models are © InsightFace (non-commercial research licence) and RTMO © OpenMMLab. "
-                           "They are downloaded from their official pages and are not part of SSAS."))
+        ml.addWidget(
+            muted(
+                "The face models are © InsightFace (non-commercial research licence) and RTMO © OpenMMLab. "
+                "They are downloaded from their official pages and are not part of SSAS."
+            )
+        )
         root.addWidget(models)
 
         school = QGroupBox("School")
@@ -152,8 +173,13 @@ class SettingsTab(QWidget):
         self.server_url.setText(s.server_url)
         self.server_fp.setText(s.server_cert_sha256)
         prov = available_providers()
-        self.providers.setText("GPU (DirectML) ✓" if "DmlExecutionProvider" in prov
-                               else "GPU (CUDA) ✓" if "CUDAExecutionProvider" in prov else "CPU only")
+        self.providers.setText(
+            "GPU (DirectML) ✓"
+            if "DmlExecutionProvider" in prov
+            else "GPU (CUDA) ✓"
+            if "CUDAExecutionProvider" in prov
+            else "CPU only"
+        )
         self.refresh_models()
 
     def refresh_models(self):
@@ -197,14 +223,17 @@ class SettingsTab(QWidget):
 
         def work(progress, _cancelled):
             download_models(self.ctx.models_dir, progress)
-            return True
 
-        self.job, self._thread = start_job(self, work)
-        self.job.progress.connect(lambda m, f: (self.dl_progress.setValue(int(f * 1000)), self.models_status.setText(f"Downloading {m}…")))
-        self.job.finished.connect(self._downloaded)
-        self.job.failed.connect(self._download_failed)
+        self.job = run_job(
+            work, on_progress=self._download_progress, on_done=self._downloaded, on_error=self._download_failed
+        )
+
+    def _download_progress(self, name: str, fraction: float) -> None:
+        self.dl_progress.setValue(int(fraction * 1000))
+        self.models_status.setText(f"Downloading {name}…")
 
     def _downloaded(self, _):
+        self.job = None
         self.dl_btn.setEnabled(True)
         self.dl_progress.hide()
         self.ctx.reset_engine()
@@ -212,11 +241,15 @@ class SettingsTab(QWidget):
         info(self, "Models downloaded.")
 
     def _download_failed(self, msg: str):
+        self.job = None
         self.dl_btn.setEnabled(True)
         self.dl_progress.hide()
         self.refresh_models()
         if self.ctx.models_ready:
-            info(self, f"The face models are ready. The body-pose model could not be downloaded ({msg}); "
-                       "boards will still work, without stick figures and head count.")
+            info(
+                self,
+                f"The face models are ready. The body-pose model could not be downloaded ({msg}); "
+                "boards will still work, without stick figures and head count.",
+            )
         else:
             error(self, f"Download failed: {msg}\nCheck the internet connection and try again.")

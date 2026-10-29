@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-
 from conftest import needs_face_models
+
 from ssas_studio.core.align import norm_crop
 from ssas_studio.core.detect import FaceDetector, detect_size_for
 from ssas_studio.core.embed import FaceEmbedder

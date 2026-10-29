@@ -1,4 +1,5 @@
-from ssas_studio.core.capture_logic import RING_SEGMENTS, AutoStart, CaptureSession
+from ssas_studio.core.capture_logic import RING_SEGMENTS, CaptureSession
+from ssas_studio.core.student_capture import AutoStart, Measurement, StudentCapture
 
 
 def _look(seg, scale=1.0):
@@ -116,3 +117,101 @@ def test_auto_start_needs_one_steady_face_and_the_previous_one_to_leave():
     c.update([], 5.7)  # gone long enough
     c.update([200], 5.8)
     assert c.update([200], 7.0)[1]
+
+
+# ----- StudentCapture: the whole hands-free flow without a camera -----
+
+GOOD = Measurement(0.0, 0.0, 0.3, None)
+
+
+def _capture(**kw):
+    return StudentCapture(
+        lambda: CaptureSession(photos_per_segment=1, front_photos=1, require_blink=False),
+        save_interval_s=0.0,
+        done_shown_s=1.0,
+        give_up_s=5.0,
+        auto_start=AutoStart(hold_s=0.5, absent_s=0.3),
+        stamp=lambda: "S",
+        **kw,
+    )
+
+
+def _measure_for(seg):
+    dy, dp = CaptureSession.segment_vector(seg)
+    return lambda: Measurement(-dy, dp, 0.3, None)
+
+
+def test_no_student_chosen_means_idle():
+    c = _capture()
+    assert c.step([200], 0.0, lambda: GOOD).state == "idle"
+
+
+def test_waits_for_a_steady_face_then_captures_and_finishes():
+    c = _capture()
+    c.set_student("Ahmed")
+    r = c.step([], 0.0, lambda: GOOD)
+    assert r.state == "waiting" and "step in" in r.message and r.name == "Ahmed"
+    assert c.step([200], 0.1, lambda: GOOD).state == "waiting"
+    r = c.step([200], 0.7, lambda: GOOD)  # steady for long enough: capturing starts in the same frame
+    assert r.state == "capturing" and r.save_as == "S-001-front.jpg" and r.total == 1 + RING_SEGMENTS
+    names = [r.save_as]
+    now = 0.8
+    for seg in range(RING_SEGMENTS):
+        r = c.step([200], now, _measure_for(seg))
+        names.append(r.save_as)
+        now += 0.1
+    assert names[1:] == [f"S-{i + 2:03d}-seg{seg:02d}.jpg" for i, seg in enumerate(range(RING_SEGMENTS))]
+    assert r.student_done and r.state == "done" and c.name is None
+    # "Done" stays on for a moment, then the camera waits for the next student.
+    assert c.step([200], now + 0.5, lambda: GOOD).state == "done"
+    c.set_student("Omar")
+    r = c.step([200], now + 1.5, lambda: GOOD)
+    assert r.state == "waiting" and "step in" in r.message  # the same face must leave first
+
+
+def test_saves_are_throttled_and_the_count_stays_in_sync():
+    c = StudentCapture(
+        lambda: CaptureSession(photos_per_segment=2, front_photos=3, require_blink=False),
+        save_interval_s=1.0,
+        auto_start=AutoStart(hold_s=0.0, absent_s=0.0),
+    )
+    c.set_student("Ahmed")
+    first = c.step([200], 0.0, lambda: GOOD)
+    assert first.save_as and first.saved == 1
+    too_soon = c.step([200], 0.2, lambda: GOOD)
+    assert too_soon.save_as is None and too_soon.saved == 1  # not counted, will be taken again
+    assert c.step([200], 1.5, lambda: GOOD).saved == 2
+
+
+def test_skip_and_walking_away_go_back_to_waiting():
+    c = _capture()
+    c.set_student("Ahmed")
+    c.step([200], 0.0, lambda: GOOD)
+    assert c.step([200], 0.6, lambda: GOOD).state == "capturing"
+    c.skip()
+    assert c.step([200], 0.7, lambda: GOOD).state == "waiting"
+    c = _capture()
+    c.set_student("Ahmed")
+    c.step([200], 0.0, lambda: GOOD)
+    assert c.step([200], 0.6, lambda: GOOD).state == "capturing"
+    r = c.step([], 6.0, lambda: GOOD)  # nobody for longer than give_up_s
+    assert r.state == "waiting" and not c.capturing
+
+
+def test_a_second_person_blocks_but_does_not_save():
+    c = _capture()
+    c.set_student("Ahmed")
+    c.step([200], 0.0, lambda: GOOD)
+    c.step([200], 0.6, lambda: GOOD)
+    r = c.step([200, 190], 0.7, lambda: GOOD)
+    assert r.blocked and r.save_as is None
+
+
+def test_changing_the_student_mid_capture_abandons_it():
+    c = _capture()
+    c.set_student("Ahmed")
+    c.step([200], 0.0, lambda: GOOD)
+    assert c.step([200], 0.6, lambda: GOOD).state == "capturing"
+    c.set_student("Omar")
+    r = c.step([200], 0.7, lambda: GOOD)
+    assert r.state == "waiting" and r.name == "Omar" and r.save_as is None

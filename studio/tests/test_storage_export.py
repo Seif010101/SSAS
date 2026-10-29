@@ -56,8 +56,17 @@ def _fake_model(school, code):
     c = school.load_class(code)
     students = [{"id": s.id, "name": s.name} for s in c.students]
     w = np.eye(len(students), 512, dtype=np.float32)
-    m = classmodel.build(code, students, w, {"accept": 0.3, "strong": 0.5, "margin": 0.05}, {}, "head",
-                         {"detector": {"file": "det_10g.onnx", "sha256": "x"}}, "now", "test")
+    m = classmodel.build(
+        code,
+        students,
+        w,
+        {"accept": 0.3, "strong": 0.5, "margin": 0.05},
+        {},
+        "head",
+        {"detector": {"file": "det_10g.onnx", "sha256": "x"}},
+        "now",
+        "test",
+    )
     classmodel.write(school.model_dir(code) / "class-model.json", m)
 
 

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QSettings, Signal
 
 from ..core.models import missing_models
 from ..core.storage import School
-from ..resources import ORG_NAME, APP_NAME, bundled_apk, default_data_dir, default_models_dir
+from ..resources import APP_NAME, ORG_NAME, bundled_apk, default_data_dir, default_models_dir
 
 
 class AppContext(QObject):
@@ -24,6 +25,7 @@ class AppContext(QObject):
         self.models_dir = Path(models_dir or default_models_dir())
         self.school = School(data_dir)
         self._engine = None
+        self._engine_lock = threading.Lock()
 
     @property
     def data_dir(self) -> Path:
@@ -46,18 +48,20 @@ class AppContext(QObject):
     @prefer_gpu.setter
     def prefer_gpu(self, v: bool) -> None:
         self.qsettings.setValue("prefer_gpu", "true" if v else "false")
-        self._engine = None
+        self.reset_engine()
 
     def engine(self):
-        """Face models, loaded once (slow the first time)."""
-        if self._engine is None:
-            from ..core.pipeline import FaceEngine
+        """Face models, loaded once (a few seconds the first time). Safe to call from any thread."""
+        with self._engine_lock:
+            if self._engine is None:
+                from ..core.pipeline import FaceEngine
 
-            self._engine = FaceEngine(self.models_dir, prefer_gpu=self.prefer_gpu)
-        return self._engine
+                self._engine = FaceEngine(self.models_dir, prefer_gpu=self.prefer_gpu)
+            return self._engine
 
     def reset_engine(self) -> None:
-        self._engine = None
+        with self._engine_lock:
+            self._engine = None
 
     @property
     def apk_path(self) -> Path | None:

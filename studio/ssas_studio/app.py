@@ -10,11 +10,14 @@ def main() -> int:
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
 
+    from . import logs
     from .resources import APP_NAME, ORG_NAME
     from .ui.context import AppContext
     from .ui.main_window import MainWindow
-    from .ui.theme import app_icon, apply as apply_theme
+    from .ui.theme import app_icon
+    from .ui.theme import apply as apply_theme
 
+    logs.install()
     app = QApplication(sys.argv)
     app.setOrganizationName(ORG_NAME)
     app.setApplicationName(APP_NAME)

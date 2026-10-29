@@ -2,8 +2,8 @@ import json
 
 import cv2
 import numpy as np
-
 from conftest import needs_face_models
+
 from ssas_studio.core import classmodel
 from ssas_studio.core.align import norm_crop
 from ssas_studio.core.pipeline import FaceEngine, train_and_save

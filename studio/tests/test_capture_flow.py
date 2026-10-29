@@ -6,7 +6,6 @@ import time
 import cv2
 import numpy as np
 import pytest
-
 from conftest import needs_face_models
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -61,11 +60,14 @@ class FakeCamera:
 
 @needs_face_models
 @pytest.mark.parametrize("strict", [False])
-def test_capture_a_class_hands_free(tmp_path, models_dir, astronaut_bgr, monkeypatch, strict):
+def test_capture_a_class_hands_free(tmp_path, models_dir, astronaut_bgr, monkeypatch, capfd, strict):
+    from functools import partial
+
     from PySide6.QtWidgets import QApplication
 
-    from ssas_studio.core.capture_logic import AutoStart
-    from ssas_studio.ui import capture_tab as ct
+    from ssas_studio.core.student_capture import AutoStart, StudentCapture
+    from ssas_studio.ui.capture import tab as ct
+    from ssas_studio.ui.capture import worker as cw
     from ssas_studio.ui.context import AppContext
 
     app = QApplication.instance() or QApplication([])
@@ -78,13 +80,12 @@ def test_capture_a_class_hands_free(tmp_path, models_dir, astronaut_bgr, monkeyp
     m = np.float32([[k, 0, 480 - k * cx], [0, k, 270 - k * cy]])
     canvas = cv2.warpAffine(astronaut_bgr, m, (960, 540), borderMode=cv2.BORDER_REPLICATE)
 
-    monkeypatch.setattr(ct.cv2, "VideoCapture", lambda *a, **k: FakeCamera(canvas))
-    monkeypatch.setattr(ct, "head_pose", lambda kps: FakeCamera.pose)
-    monkeypatch.setattr(ct, "eye_openness", lambda pts: FakeCamera.openness)
-    monkeypatch.setattr(ct, "check_face", lambda img, box: None)
-    monkeypatch.setattr(ct, "SAVE_INTERVAL_S", 0.0)
-    monkeypatch.setattr(ct, "DONE_SHOWN_S", 0.2)
-    monkeypatch.setattr(ct, "AutoStart", lambda: AutoStart(hold_s=0.15, absent_s=0.1))
+    monkeypatch.setattr(cw.cv2, "VideoCapture", lambda *a, **k: FakeCamera(canvas))
+    monkeypatch.setattr(cw, "head_pose", lambda kps: FakeCamera.pose)
+    monkeypatch.setattr(cw, "eye_openness", lambda pts: FakeCamera.openness)
+    monkeypatch.setattr(cw, "check_face", lambda img, box: None)
+    monkeypatch.setattr(cw, "StudentCapture", partial(StudentCapture, save_interval_s=0.0, done_shown_s=0.2))
+    monkeypatch.setattr(cw, "AutoStart", lambda: AutoStart(hold_s=0.15, absent_s=0.1))
     monkeypatch.setattr(ct.QApplication, "beep", staticmethod(lambda: None))
     messages = []
     monkeypatch.setattr(ct, "info", lambda parent, m: messages.append(m))
@@ -122,4 +123,9 @@ def test_capture_a_class_hands_free(tmp_path, models_dir, astronaut_bgr, monkeyp
         assert len(photos) == 40, (s.name, len(photos))
         assert all(p.parent == school.student_dir("9A1", s) for p in photos)
     assert tab.class_label.text().startswith("2 of 2")
+    assert tab.start_btn.isEnabled() and tab.class_box.isEnabled()
+    assert "Destroyed while thread" not in capfd.readouterr().err
+    # Everyone is done, so starting again explains that instead of opening the camera.
+    tab.toggle()
+    assert tab.worker is None and "already has all the photos" in messages[-1]
     tab.shutdown()
