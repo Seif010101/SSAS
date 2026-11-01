@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SSAS Downloads</title>
+<meta name="description" content="Download SSAS (Seif's Smart Attendance System) for Windows, the Android app and the server. All versions.">
+<meta name="theme-color" content="#0f766e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f766e'/%3E%3Ccircle cx='32' cy='32' r='19' fill='none' stroke='%23fff' stroke-width='6'/%3E%3Cpolyline points='23,33 29,40 42,26' fill='none' stroke='%23fff' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f3f6f6;
+    --panel: #ffffff;
+    --text: #0d1b1e;
+    --muted: #4b5d61;
+    --line: #d7e1e0;
+    --accent: #0f766e;
+    --accent-hover: #0a5c55;
+    --on-accent: #ffffff;
+    --focus: #1d4ed8;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Tahoma, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1517;
+      --panel: #111f22;
+      --text: #e3eeec;
+      --muted: #9fb4b2;
+      --line: #23393d;
+      --accent: #34c6b4;
+      --accent-hover: #6ad8ca;
+      --on-accent: #04211d;
+      --focus: #93c5fd;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.5; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+  .page {
+    max-width: 1000px; margin: 0 auto;
+    padding-block: 40px 56px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+  header svg { width: 40px; height: 40px; flex: none; }
+  header b { display: block; font-size: 1.3rem; letter-spacing: .03em; }
+  header span { color: var(--muted); font-size: .9rem; }
+
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px; min-width: 0; }
+  h1, h2 { margin: 0 0 6px; line-height: 1.2; }
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.2rem; }
+  .sub { margin: 0 0 20px; color: var(--muted); }
+
+  .big { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 84px; padding: 14px 20px;
+         border-radius: 12px; background: var(--accent); color: var(--on-accent); text-decoration: none; text-align: center; }
+  .big:hover { background: var(--accent-hover); }
+  .big strong { font-size: 1.25rem; }
+  .big small { font-size: .9rem; opacity: .9; font-variant-numeric: tabular-nums; }
+  .also { margin: 14px 0 0; text-align: center; color: var(--muted); }
+  .hint { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
+
+  ol { list-style: none; margin: 0; padding: 0; }
+  li.release { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  li.release:first-child { padding-top: 4px; }
+  .ver b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+  .ver span { margin-left: 8px; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
+  .ver em { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: .75rem; font-style: normal; font-weight: 600; }
+  .files { display: flex; flex-wrap: wrap; gap: 8px; }
+  .files a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line);
+             color: var(--text); text-decoration: none; font-size: .9rem; font-weight: 600; }
+  .files a:hover { border-color: var(--accent); color: var(--accent); }
+  .all { display: inline-block; margin-top: 16px; font-weight: 600; }
+  footer { margin-top: 28px; color: var(--muted); font-size: .85rem; }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: 1fr; }
+    .page { padding-block: 24px 40px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0f766e"/><circle cx="32" cy="32" r="19" fill="none" stroke="#fff" stroke-width="6"/><polyline points="23,33 29,40 42,26" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><b>SSAS</b><span>Seif's Smart Attendance System</span></div>
+  </header>
+
+  <main class="layout">
+    <section class="box" aria-labelledby="dl-title">
+      <h1 id="dl-title">Download SSAS</h1>
+      <p class="sub">For the Windows laptop that prepares everything.</p>
+      <a class="big" id="main-dl" href="https://github.com/Seif010101/SSAS/releases/download/v0.1.3/SSAS-Studio-Setup-0.1.3.exe">
+        <strong>Download for Windows</strong>
+        <small id="main-info">v0.1.3 · 98 MB · Windows 10/11</small>
+      </a>
+      <p class="also">Also:
+        <a id="main-apk" href="https://github.com/Seif010101/SSAS/releases/download/v0.1.3/ssas-board.apk">Android app</a> ·
+        <a id="main-server" href="https://github.com/Seif010101/SSAS/releases/download/v0.1.3/ssas-server.tar.gz">Server</a>
+      </p>
+      <p class="hint">If Windows shows "Windows protected your PC", click <b>More info</b>, then <b>Run anyway</b>.</p>
+    </section>
+
+    <section class="box" aria-labelledby="ver-title">
+      <h2 id="ver-title">Versions</h2>
+      <p class="sub">Newest first.</p>
+      <ol id="versions">
+        <li class="release">
+          <div class="ver"><b>v0.1.3</b><span>2026-10-29</span><em>Latest</em></div>
+          <div class="files">
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.3/SSAS-Studio-Setup-0.1.3.exe">Windows</a>
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.3/ssas-board.apk">Android</a>
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.3/ssas-server.tar.gz">Server</a>
+          </div>
+        </li>
+        <li class="release">
+          <div class="ver"><b>v0.1.2</b><span>2026-10-29</span></div>
+          <div class="files">
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.2/SSAS-Studio-Setup-0.1.2.exe">Windows</a>
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.2/ssas-board.apk">Android</a>
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.2/ssas-server.tar.gz">Server</a>
+          </div>
+        </li>
+        <li class="release">
+          <div class="ver"><b>v0.1.1</b><span>2026-10-28</span></div>
+          <div class="files">
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.1/SSAS-Studio-Setup-0.1.1.exe">Windows</a>
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.1/ssas-board.apk">Android</a>
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.1/ssas-server.tar.gz">Server</a>
+          </div>
+        </li>
+        <li class="release">
+          <div class="ver"><b>v0.1.0</b><span>2026-10-26</span></div>
+          <div class="files">
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.0/SSAS-Studio-Setup-0.1.0.exe">Windows</a>
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.0/ssas-board.apk">Android</a>
+            <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.0/ssas-server-0.1.0.tar.gz">Server</a>
+          </div>
+        </li>
+      </ol>
+      <a class="all" href="https://github.com/Seif010101/SSAS/releases">All releases on GitHub</a>
+    </section>
+  </main>
+
+  <footer>© 2026 SSAS</footer>
+</div>
+
+<script>
+// Show new versions automatically. If GitHub cannot be reached, the list above stays as it is.
+(function () {
+  "use strict";
+  var REPO = "Seif010101/SSAS";
+  var KINDS = [
+    ["Windows", /^SSAS-Studio-Setup.*\.exe$/i],
+    ["Android", /\.apk$/i],
+    ["Server", /^ssas-server.*\.tar\.gz$/i],
+  ];
+  function mb(bytes) { return Math.max(1, Math.round(bytes / 1e6)) + " MB"; }
+  function find(rel, re) { return (rel.assets || []).filter(function (a) { return re.test(a.name); })[0]; }
+  function el(tag, attrs, text) {
+    var e = document.createElement(tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text) e.textContent = text;
+    return e;
+  }
+
+  fetch("https://api.github.com/repos/" + REPO + "/releases?per_page=30", { headers: { Accept: "application/vnd.github+json" } })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (releases) {
+      releases = releases.filter(function (r) { return !r.draft && !r.prerelease && find(r, KINDS[0][1]); });
+      if (!releases.length) return;
+
+      var latest = releases[0];
+      var exe = find(latest, KINDS[0][1]), apk = find(latest, KINDS[1][1]), srv = find(latest, KINDS[2][1]);
+      document.getElementById("main-dl").href = exe.browser_download_url;
+      document.getElementById("main-info").textContent = latest.tag_name + " · " + mb(exe.size) + " · Windows 10/11";
+      if (apk) document.getElementById("main-apk").href = apk.browser_download_url;
+      if (srv) document.getElementById("main-server").href = srv.browser_download_url;
+
+      var list = document.getElementById("versions");
+      list.textContent = "";
+      releases.forEach(function (rel, i) {
+        var li = el("li", { "class": "release" });
+        var ver = el("div", { "class": "ver" });
+        ver.appendChild(el("b", {}, rel.tag_name));
+        ver.appendChild(el("span", {}, (rel.published_at || "").slice(0, 10)));
+        if (i === 0) ver.appendChild(el("em", {}, "Latest"));
+        var files = el("div", { "class": "files" });
+        KINDS.forEach(function (k) {
+          var a = find(rel, k[1]);
+          if (a) files.appendChild(el("a", { href: a.browser_download_url, title: a.name + " · " + mb(a.size) }, k[0]));
+        });
+        li.appendChild(ver);
+        li.appendChild(files);
+        list.appendChild(li);
+      });
+    })
+    .catch(function () { /* keep the built-in list */ });
+})();
+</script>
+</body>
+</html>
