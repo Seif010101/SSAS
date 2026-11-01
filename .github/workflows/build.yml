@@ -13,14 +13,14 @@ on:
         type: boolean
         default: false
       version:
-        description: "Version number (e.g. 0.1.0)"
-        default: "0.1.0"
+        description: "Version number (e.g. 0.2.0)"
+        default: "0.2.0"
 
 permissions:
   contents: write
 
 env:
-  VERSION: ${{ inputs.version || '0.1.0' }}
+  VERSION: ${{ inputs.version || '0.2.0' }}
 
 jobs:
   models:
@@ -98,6 +98,8 @@ jobs:
     name: Board app (APK)
     needs: models
     runs-on: ubuntu-latest
+    outputs:
+      signing: ${{ steps.key.outputs.signing }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -108,26 +110,36 @@ jobs:
         with:
           name: models
           path: models
-      - name: Optional private signing key
+      - name: Signing key
+        id: key
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "SSAS_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          KS="$RUNNER_TEMP/signing.p12"
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$KS"
+            { echo "SSAS_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"; echo "SSAS_KEY_ALIAS=${KEY_ALIAS:-ssas}"; echo "SSAS_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"; } >> "$GITHUB_ENV"
+            echo "signing=private" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::Signing the APK with the public test key (add the ANDROID_KEYSTORE_BASE64 secret to use your own)"
+            # No private key: sign with a key made just for this run. Fine for tests, never published.
+            PW=$(openssl rand -hex 24)
+            echo "::add-mask::$PW"
+            keytool -genkeypair -storetype PKCS12 -keystore "$KS" -alias ci -keyalg RSA -keysize 2048 -validity 2 \
+              -storepass "$PW" -keypass "$PW" -dname "CN=SSAS CI throw-away key" > /dev/null
+            { echo "SSAS_KEYSTORE_PASSWORD=$PW"; echo "SSAS_KEY_ALIAS=ci"; echo "SSAS_KEY_PASSWORD=$PW"; } >> "$GITHUB_ENV"
+            echo "signing=throwaway" >> "$GITHUB_OUTPUT"
+            echo "::notice::No signing secrets: this APK is signed with a throw-away key and cannot be released."
           fi
+          echo "SSAS_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
       - name: Test and build
         working-directory: board-app
         env:
           SSAS_MODELS_DIR: ${{ github.workspace }}/models
           SSAS_VERSION: ${{ env.VERSION }}
-          SSAS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          SSAS_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          SSAS_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [ -n "$SSAS_KEYSTORE_PASSWORD" ] || unset SSAS_KEYSTORE_PASSWORD SSAS_KEY_ALIAS SSAS_KEY_PASSWORD
           chmod +x gradlew
           ./gradlew --no-daemon :core:test :app:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../ssas-board.apk
@@ -187,6 +199,16 @@ jobs:
     needs: [studio-windows, android, server-tests, studio-tests]
     runs-on: ubuntu-latest
     steps:
+      - name: Check before publishing
+        env:
+          SIGNING: ${{ needs.android.outputs.signing }}
+        run: |
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::The version must look like 1.2.3 (got '$VERSION')."; exit 1
+          fi
+          if [ "$SIGNING" != "private" ]; then
+            echo "::error::The screen app was not signed with the private key. Add the 4 ANDROID_* secrets (CONTRIBUTING.md) and run the release again."; exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:

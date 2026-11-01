@@ -22,24 +22,24 @@ android {
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
+    // The signing key never lives in the repository. CI passes it in from GitHub Secrets (see CONTRIBUTING.md).
+    // A local build without these variables is signed with the Android debug key, which is fine for testing only.
+    val keystore = System.getenv("SSAS_KEYSTORE_FILE")
     signingConfigs {
-        create("release") {
-            // A private key can be given by the build (secret); otherwise the public test key in keystore/ is used.
-            val ks = System.getenv("SSAS_KEYSTORE_FILE")
-            storeFile = file(ks ?: "../keystore/ssas-public.jks")
-            storePassword = System.getenv("SSAS_KEYSTORE_PASSWORD") ?: "ssas-public"
-            keyAlias = System.getenv("SSAS_KEY_ALIAS") ?: "ssas"
-            keyPassword = System.getenv("SSAS_KEY_PASSWORD") ?: "ssas-public"
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("SSAS_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("SSAS_KEY_ALIAS")
+                keyPassword = System.getenv("SSAS_KEY_PASSWORD")
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
-        }
-        debug {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

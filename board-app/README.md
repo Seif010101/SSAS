@@ -12,7 +12,7 @@ SSAS_MODELS_DIR=/path/to/models ./gradlew :core:test
 ./gradlew :app:assembleRelease   # -> app/build/outputs/apk/release/app-release.apk
 ```
 
-The release APK is signed with `keystore/ssas-public.jks` (a public test key) unless
-`SSAS_KEYSTORE_FILE`, `SSAS_KEYSTORE_PASSWORD`, `SSAS_KEY_ALIAS` and `SSAS_KEY_PASSWORD` are set.
-Anyone can sign an app with the public key, so use your own key for real deployments
-(see docs/board-install.md).
+No signing key is kept in this repository. The release build reads it from
+`SSAS_KEYSTORE_FILE`, `SSAS_KEYSTORE_PASSWORD`, `SSAS_KEY_ALIAS` and `SSAS_KEY_PASSWORD`; CI fills these
+from the GitHub Secrets described in `CONTRIBUTING.md`. Without them a local build is signed with the Android
+debug key (testing only), and CI signs with a throw-away key that the release job refuses to publish.
