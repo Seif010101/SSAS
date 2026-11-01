@@ -65,10 +65,12 @@
   .hint { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
 
   ol { list-style: none; margin: 0; padding: 0; }
-  li.release { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .versions { container: versions / inline-size; }
+  li.release { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  @container versions (max-width: 420px) { li.release { grid-template-columns: 1fr; } }  /* narrow: buttons under the version, in every row */
   li.release:first-child { padding-top: 4px; }
   .ver b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-  .ver span { margin-left: 8px; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
+  .ver .date { display: block; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
   .ver em { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: .75rem; font-style: normal; font-weight: 600; }
   .files { display: flex; flex-wrap: wrap; gap: 8px; }
   .files a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line);
@@ -105,12 +107,12 @@
       <p class="hint">If Windows shows "Windows protected your PC", click <b>More info</b>, then <b>Run anyway</b>.</p>
     </section>
 
-    <section class="box" aria-labelledby="ver-title">
+    <section class="box versions" aria-labelledby="ver-title">
       <h2 id="ver-title">Versions</h2>
       <p class="sub">Newest first.</p>
       <ol id="versions">
         <li class="release">
-          <div class="ver"><b>v0.1.3</b><span>2026-10-29</span><em>Latest</em></div>
+          <div class="ver"><b>v0.1.3</b><em>Latest</em><span class="date">2026-10-29</span></div>
           <div class="files">
             <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.3/SSAS-Studio-Setup-0.1.3.exe">Windows</a>
             <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.3/ssas-board.apk">Android</a>
@@ -118,7 +120,7 @@
           </div>
         </li>
         <li class="release">
-          <div class="ver"><b>v0.1.2</b><span>2026-10-29</span></div>
+          <div class="ver"><b>v0.1.2</b><span class="date">2026-10-29</span></div>
           <div class="files">
             <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.2/SSAS-Studio-Setup-0.1.2.exe">Windows</a>
             <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.2/ssas-board.apk">Android</a>
@@ -126,7 +128,7 @@
           </div>
         </li>
         <li class="release">
-          <div class="ver"><b>v0.1.1</b><span>2026-10-28</span></div>
+          <div class="ver"><b>v0.1.1</b><span class="date">2026-10-28</span></div>
           <div class="files">
             <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.1/SSAS-Studio-Setup-0.1.1.exe">Windows</a>
             <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.1/ssas-board.apk">Android</a>
@@ -134,7 +136,7 @@
           </div>
         </li>
         <li class="release">
-          <div class="ver"><b>v0.1.0</b><span>2026-10-26</span></div>
+          <div class="ver"><b>v0.1.0</b><span class="date">2026-10-26</span></div>
           <div class="files">
             <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.0/SSAS-Studio-Setup-0.1.0.exe">Windows</a>
             <a href="https://github.com/Seif010101/SSAS/releases/download/v0.1.0/ssas-board.apk">Android</a>
@@ -187,8 +189,8 @@
         var li = el("li", { "class": "release" });
         var ver = el("div", { "class": "ver" });
         ver.appendChild(el("b", {}, rel.tag_name));
-        ver.appendChild(el("span", {}, (rel.published_at || "").slice(0, 10)));
         if (i === 0) ver.appendChild(el("em", {}, "Latest"));
+        ver.appendChild(el("span", { "class": "date" }, (rel.published_at || "").slice(0, 10)));
         var files = el("div", { "class": "files" });
         KINDS.forEach(function (k) {
           var a = find(rel, k[1]);
