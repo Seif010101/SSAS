@@ -16,8 +16,8 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from datetime import date as Date
-from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -85,9 +85,11 @@ def check_result(board: sqlite3.Row, p) -> dict:
     ):
         raise HTTPException(400, "missing or wrong group_code, date, session or people")
     try:
-        Date.fromisoformat(day)
+        day = Date.fromisoformat(day).isoformat()  # one spelling only, so (group, date, session) stays unique
     except ValueError:
         raise HTTPException(400, "bad date") from None
+    if day > (datetime.now(UTC).date() + timedelta(days=1)).isoformat():
+        raise HTTPException(400, "date in the future")  # a stolen token cannot fill sessions ahead
     if p.get("board_code") != board["board_code"]:
         raise HTTPException(403, "this result is for another screen")
     if group not in json.loads(board["groups"]):

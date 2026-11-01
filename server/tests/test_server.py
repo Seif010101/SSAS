@@ -94,6 +94,12 @@ def test_results_are_checked_and_names_come_from_the_registered_list(ctx):
         r = result(1, [("Ahmed", "present")])
         r[key] = bad
         assert client.post("/api/v1/results", json=r, headers=H).status_code == 400, key
+    future = result(5, [("Ahmed", "present")], day="2099-01-01")
+    assert client.post("/api/v1/results", json=future, headers=H).status_code == 400
+    basic = result(6, [("Ahmed", "present")], day="20261026")  # another spelling of the same date
+    assert client.post("/api/v1/results", json=basic, headers=H).status_code == 200
+    assert client.post("/api/v1/results", json=result(6, [("Ahmed", "present")]), headers=H).status_code == 409
+    db.exec("DELETE FROM results")
     renamed = result(1, [("<script>alert(1)</script>", "present"), ("=cmd|' /C calc'!A0", "absent")])
     assert client.post("/api/v1/results", json=renamed, headers=H).status_code == 200
     stored = json.loads(db.one("SELECT payload FROM results")["payload"])
@@ -221,6 +227,7 @@ def test_admin_pages_can_be_limited_to_some_addresses(tmp_path):
 def test_csv_cells_cannot_be_formulas():
     assert csv_cell("=1+1") == "'=1+1" and csv_cell("@SUM(A1)") == "'@SUM(A1)" and csv_cell("-2") == "'-2"
     assert csv_cell("Ahmed") == "Ahmed" and csv_cell(3) == "3" and csv_cell(None) == ""
+    assert csv_cell("＝1+1") == "'＝1+1"  # full-width equals sign
 
 
 def test_database_from_0_1_is_upgraded(tmp_path):

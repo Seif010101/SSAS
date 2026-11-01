@@ -1,4 +1,7 @@
-# SSAS web app
+# SSAS web app (early mock-up)
+
+> **Old school-only mock-up from 0.1.** It still uses the school words (teacher, class, student) and is not
+> connected to the server. It is kept as the starting point for the supervisor correction page (docs/ROADMAP.md).
 
 Teacher page (UI preview). The admin dashboard will be added to the same app later.
 

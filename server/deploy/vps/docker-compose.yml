@@ -16,7 +16,8 @@ services:
     env_file: .env
     environment:
       SSAS_TLS: "off"            # Caddy does HTTPS
-      SSAS_BEHIND_PROXY: "true"  # trust the visitor address Caddy passes on (for the sign-in limit)
+      SSAS_BEHIND_PROXY: "true"  # use the visitor address Caddy passes on (sign-in limit, SSAS_ADMIN_ALLOW)
+      SSAS_TRUSTED_PROXIES: "172.30.57.0/24"  # ...but only from this private network (Caddy)
     volumes:
       - ssas_data:/data
     logging:
@@ -44,3 +45,9 @@ volumes:
   ssas_data:
   caddy_data:
   caddy_config:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.57.0/24

@@ -19,8 +19,8 @@ def run() -> None:
     host = os.environ.get("SSAS_HOST", "0.0.0.0")
     options: dict = {"workers": 1, "server_header": False, "proxy_headers": cfg.behind_proxy}
     if cfg.behind_proxy:
-        # Only the proxy can reach the app (it is not published), so its forwarded address is trusted.
-        options["forwarded_allow_ips"] = os.environ.get("SSAS_TRUSTED_PROXIES", "*")
+        # Trust the visitor address only when it comes from the proxy itself (deploy/vps sets Caddy's network).
+        options["forwarded_allow_ips"] = os.environ.get("SSAS_TRUSTED_PROXIES", "127.0.0.1")
     if cfg.tls:
         ensure_cert(cfg)
         options.update(

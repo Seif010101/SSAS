@@ -12,6 +12,7 @@ from __future__ import annotations
 import ipaddress
 import threading
 import time
+import unicodedata
 from collections import deque
 
 from fastapi import HTTPException
@@ -135,4 +136,5 @@ class RateLimit:
 def csv_cell(value) -> str:
     """Text that Excel shows as text: a leading = + - @ (or tab / return) would make it a formula."""
     s = "" if value is None else str(value)
-    return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+    first = unicodedata.normalize("NFKC", s[:1])  # also catches full-width ＝ ＋ － ＠
+    return "'" + s if first in ("=", "+", "-", "@", "\t", "\r") else s
