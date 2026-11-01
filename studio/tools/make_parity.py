@@ -15,7 +15,7 @@ from skimage import data
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ssas_studio.core import classmodel  # noqa: E402
+from ssas_studio.core import groupmodel  # noqa: E402
 from ssas_studio.core.align import norm_crop  # noqa: E402
 from ssas_studio.core.detect import FaceDetector, detect_size_for  # noqa: E402
 from ssas_studio.core.embed import FaceEmbedder  # noqa: E402
@@ -43,7 +43,7 @@ a_face = det.detect(astro, (640, 640))[0]
 c_face = det.detect(camera, detect_size_for(camera.shape))[0]
 a_emb = emb.embed([norm_crop(astro, a_face.kps)])[0]
 c_emb = emb.embed([norm_crop(camera, c_face.kps)])[0]
-model = classmodel.build(
+model = groupmodel.build(
     "TEST",
     [{"id": "T-001", "name": "Astronaut"}, {"id": "T-002", "name": "Camera Man"}],
     np.stack([a_emb, c_emb]),
@@ -54,7 +54,7 @@ model = classmodel.build(
     "2026-01-01T00:00:00",
     "test",
 )
-classmodel.write(out / "class-TEST.json", model)
+groupmodel.write(out / "group-TEST.json", model)
 
 parity = {
     "astronaut_640": faces_json(astro, (640, 640)),

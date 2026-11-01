@@ -1,6 +1,6 @@
 import numpy as np
 
-from ssas_studio.core.train import Dataset, TrainConfig, find_lookalikes, train_class
+from ssas_studio.core.train import Dataset, TrainConfig, find_lookalikes, train_group
 
 
 def _clusters(rng, n_ids, photos, aug, spread=0.045, aug_noise=0.07, offset=0):
@@ -27,13 +27,13 @@ def test_training_reaches_high_accuracy_and_rejects_strangers():
     ds = Dataset(emb, lab, grp, 8, neg, ngrp)
     cfg = TrainConfig(epochs=25, folds=3, seeds=2)
     seen = []
-    r = train_class(ds, cfg, progress=lambda m, f: seen.append(f))
+    r = train_group(ds, cfg, progress=lambda m, f: seen.append(f))
     assert r.weights.shape == (8, 512)
     assert r.metrics["accuracy"] >= 0.99
     assert r.metrics["stranger_accept_rate"] <= 0.01
     assert r.accept < r.strong
     assert seen and abs(seen[-1] - 1.0) < 1e-9 and all(0 <= f <= 1.0 + 1e-9 for f in seen)
-    # Weights identify a fresh photo of student 3.
+    # Weights identify a fresh photo of person 3.
     e = emb[lab == 3][0]
     assert int(np.argmax(r.weights @ e)) == 3
 

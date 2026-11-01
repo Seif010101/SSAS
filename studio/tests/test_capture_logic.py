@@ -1,5 +1,5 @@
 from ssas_studio.core.capture_logic import RING_SEGMENTS, CaptureSession
-from ssas_studio.core.student_capture import AutoStart, Measurement, StudentCapture
+from ssas_studio.core.person_capture import AutoStart, Measurement, PersonCapture
 
 
 def _look(seg, scale=1.0):
@@ -108,7 +108,7 @@ def test_auto_start_needs_one_steady_face_and_the_previous_one_to_leave():
     assert b.update([200, 180], 0.5) == (0.0, False)
     assert b.update([200], 0.6) == (0.0, False)
     assert b.update([60], 1.0) == (0.0, False)
-    # After a finished student the same face does not start another capture.
+    # After a finished person the same face does not start another capture.
     c = AutoStart()
     c.rearm()
     assert c.update([200], 0.0) == (0.0, False)
@@ -119,13 +119,13 @@ def test_auto_start_needs_one_steady_face_and_the_previous_one_to_leave():
     assert c.update([200], 7.0)[1]
 
 
-# ----- StudentCapture: the whole hands-free flow without a camera -----
+# ----- PersonCapture: the whole hands-free flow without a camera -----
 
 GOOD = Measurement(0.0, 0.0, 0.3, None)
 
 
 def _capture(**kw):
-    return StudentCapture(
+    return PersonCapture(
         lambda: CaptureSession(photos_per_segment=1, front_photos=1, require_blink=False),
         save_interval_s=0.0,
         done_shown_s=1.0,
@@ -141,14 +141,14 @@ def _measure_for(seg):
     return lambda: Measurement(-dy, dp, 0.3, None)
 
 
-def test_no_student_chosen_means_idle():
+def test_nobody_chosen_means_idle():
     c = _capture()
     assert c.step([200], 0.0, lambda: GOOD).state == "idle"
 
 
 def test_waits_for_a_steady_face_then_captures_and_finishes():
     c = _capture()
-    c.set_student("Ahmed")
+    c.set_person("Ahmed")
     r = c.step([], 0.0, lambda: GOOD)
     assert r.state == "waiting" and "step in" in r.message and r.name == "Ahmed"
     assert c.step([200], 0.1, lambda: GOOD).state == "waiting"
@@ -161,21 +161,21 @@ def test_waits_for_a_steady_face_then_captures_and_finishes():
         names.append(r.save_as)
         now += 0.1
     assert names[1:] == [f"S-{i + 2:03d}-seg{seg:02d}.jpg" for i, seg in enumerate(range(RING_SEGMENTS))]
-    assert r.student_done and r.state == "done" and c.name is None
-    # "Done" stays on for a moment, then the camera waits for the next student.
+    assert r.person_done and r.state == "done" and c.name is None
+    # "Done" stays on for a moment, then the camera waits for the next person.
     assert c.step([200], now + 0.5, lambda: GOOD).state == "done"
-    c.set_student("Omar")
+    c.set_person("Omar")
     r = c.step([200], now + 1.5, lambda: GOOD)
     assert r.state == "waiting" and "step in" in r.message  # the same face must leave first
 
 
 def test_saves_are_throttled_and_the_count_stays_in_sync():
-    c = StudentCapture(
+    c = PersonCapture(
         lambda: CaptureSession(photos_per_segment=2, front_photos=3, require_blink=False),
         save_interval_s=1.0,
         auto_start=AutoStart(hold_s=0.0, absent_s=0.0),
     )
-    c.set_student("Ahmed")
+    c.set_person("Ahmed")
     first = c.step([200], 0.0, lambda: GOOD)
     assert first.save_as and first.saved == 1
     too_soon = c.step([200], 0.2, lambda: GOOD)
@@ -185,13 +185,13 @@ def test_saves_are_throttled_and_the_count_stays_in_sync():
 
 def test_skip_and_walking_away_go_back_to_waiting():
     c = _capture()
-    c.set_student("Ahmed")
+    c.set_person("Ahmed")
     c.step([200], 0.0, lambda: GOOD)
     assert c.step([200], 0.6, lambda: GOOD).state == "capturing"
     c.skip()
     assert c.step([200], 0.7, lambda: GOOD).state == "waiting"
     c = _capture()
-    c.set_student("Ahmed")
+    c.set_person("Ahmed")
     c.step([200], 0.0, lambda: GOOD)
     assert c.step([200], 0.6, lambda: GOOD).state == "capturing"
     r = c.step([], 6.0, lambda: GOOD)  # nobody for longer than give_up_s
@@ -200,18 +200,18 @@ def test_skip_and_walking_away_go_back_to_waiting():
 
 def test_a_second_person_blocks_but_does_not_save():
     c = _capture()
-    c.set_student("Ahmed")
+    c.set_person("Ahmed")
     c.step([200], 0.0, lambda: GOOD)
     c.step([200], 0.6, lambda: GOOD)
     r = c.step([200, 190], 0.7, lambda: GOOD)
     assert r.blocked and r.save_as is None
 
 
-def test_changing_the_student_mid_capture_abandons_it():
+def test_changing_the_person_mid_capture_abandons_it():
     c = _capture()
-    c.set_student("Ahmed")
+    c.set_person("Ahmed")
     c.step([200], 0.0, lambda: GOOD)
     assert c.step([200], 0.6, lambda: GOOD).state == "capturing"
-    c.set_student("Omar")
+    c.set_person("Omar")
     r = c.step([200], 0.7, lambda: GOOD)
     assert r.state == "waiting" and r.name == "Omar" and r.save_as is None

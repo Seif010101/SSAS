@@ -53,9 +53,9 @@ class ParityTest {
     }
 
     @Test
-    fun fullPipelineRecognisesStudent() {
+    fun fullPipelineRecognisesPeople() {
         TestSupport.requireModels("det_10g.onnx", "w600k_r50.onnx")
-        val model = ClassModel.parse(TestSupport.text("class-TEST.json"))
+        val model = GroupModel.parse(TestSupport.text("group-TEST.json"))
         FramePipeline(TestSupport.modelsDir, poseFile = "missing.onnx", detectLongSide = 640).use { p ->
             val a = p.analyse(TestSupport.image("astronaut.png"), model)
             assertTrue(a.observation.valid)

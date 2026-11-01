@@ -42,13 +42,15 @@ class UsbPackage(private val tree: UsbTree) {
     private fun p(vararg names: String) = base + names
     private fun readText(path: List<String>) = tree.open(path).use { it.readBytes().toString(Charsets.UTF_8) }
 
-    /** Board codes on the USB. */
+    /** Board codes on the USB (names that are not safe as a folder name are left out). */
     fun boards(): List<String> {
         if ("ssas-usb.json" in tree.list(base)) {
             val index = Json.parseToJsonElement(readText(p("ssas-usb.json"))).jsonObject
-            index["boards"]?.jsonArray?.map { it.jsonPrimitive.content }?.let { return it.sorted() }
+            index["boards"]?.jsonArray?.map { it.jsonPrimitive.content }?.let { codes ->
+                return codes.filter { SafeName.isSafe(it) }.sorted()
+            }
         }
-        return tree.list(p("screens")).filterValues { it }.keys.sorted()
+        return tree.list(p("screens")).filterValues { it }.keys.filter { SafeName.isSafe(it) }.sorted()
     }
 
     /**
@@ -56,18 +58,19 @@ class UsbPackage(private val tree: UsbTree) {
      * is replaced only when everything arrived intact. [progress] gets (message, 0..1).
      */
     fun install(board: String, configDir: File, modelsDir: File, progress: (String, Float) -> Unit = { _, _ -> }): BoardConfig {
-        val dir = p("screens", board)
+        val dir = p("screens", SafeName.check(board))
         val files = tree.list(dir)
         check(files.isNotEmpty()) { "Board $board not found on the USB" }
         check("board.json" in files) { "board.json missing for $board" }
         val text = readText(dir + "board.json")
-        val config = BoardConfig.parse(text)
+        val config = BoardConfig.parse(text) // also refuses unsafe file names
+        check(config.board_code == board) { "board.json in screens/$board is for ${config.board_code}" }
 
         modelsDir.mkdirs()
         val tmp = File(configDir.parentFile, "import-tmp").apply { deleteRecursively(); mkdirs() }
         try {
-            for ((i, ref) in config.classes.withIndex()) {
-                progress("Class ${ref.class_code}", 0.05f + 0.1f * i / config.classes.size.coerceAtLeast(1))
+            for ((i, ref) in config.groups.withIndex()) {
+                progress("Group ${ref.group_code}", 0.05f + 0.1f * i / config.groups.size.coerceAtLeast(1))
                 check(ref.file in files) { "${ref.file} missing for $board" }
                 val out = File(tmp, ref.file)
                 copy(dir + ref.file, out)
@@ -119,13 +122,14 @@ class UsbPackage(private val tree: UsbTree) {
         /** Result files plus a summary.csv (opens in Excel), as name -> bytes. */
         fun resultFiles(results: List<File>): Map<String, ByteArray> {
             val out = LinkedHashMap<String, ByteArray>()
-            val csv = StringBuilder("date,period,class,student_id,student_name,status\n")
+            val csv = StringBuilder("date,session,group,person_id,person_name,status\n")
             for (f in results) {
                 out[f.name] = f.readBytes()
                 runCatching {
                     val r = ResultPayload.parse(f.readText())
-                    for (s in r.students) {
-                        csv.append("${r.date},${r.period},${r.class_code},${s.id},\"${s.name.replace("\"", "'")}\",${s.status}\n")
+                    for (person in r.people) {
+                        val cells = listOf(r.date, r.session.toString(), r.group_code, person.id, person.name, person.status)
+                        csv.append(cells.joinToString(",") { csvCell(it) }).append("\n")
                     }
                 }
             }
@@ -133,9 +137,15 @@ class UsbPackage(private val tree: UsbTree) {
             return out
         }
 
+        /** One CSV cell: quoted, and never read by Excel as a formula (a leading = + - @ gets a '). */
+        fun csvCell(value: String): String {
+            val text = if (value.isNotEmpty() && value[0] in "=+-@\t\r") "'$value" else value
+            return "\"" + text.replace("\"", "\"\"") + "\""
+        }
+
         /** Write the results into [dir]/SSAS-Results/[board]/. Returns the folder. */
         fun writeResults(dir: File, board: String, results: List<File>): File {
-            val target = File(File(dir, "SSAS-Results"), board).apply { mkdirs() }
+            val target = File(File(dir, "SSAS-Results"), SafeName.check(board)).apply { mkdirs() }
             check(target.isDirectory) { "Could not create ${target.path}" }
             for ((name, bytes) in resultFiles(results)) File(target, name).writeBytes(bytes)
             return target

@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.models import MODELS, available_providers, download_models, verify_models
+from ..core.storage import suggest_pin, valid_pin
 from ..logs import log_path
 from .common import confirm, error, info, muted, open_folder, primary, title
 from .context import AppContext
@@ -71,10 +72,11 @@ class SettingsTab(QWidget):
         )
         root.addWidget(models)
 
-        school = QGroupBox("School")
-        sf = QFormLayout(school)
-        self.school_name = QLineEdit()
-        sf.addRow("School name", self.school_name)
+        org = QGroupBox("Organisation")
+        sf = QFormLayout(org)
+        self.org_name = QLineEdit()
+        self.org_name.setPlaceholderText("e.g. Al Noor School, Acme Factory, City Gym")
+        sf.addRow("Name", self.org_name)
         drow = QHBoxLayout()
         self.data_dir = QLabel()
         change = QPushButton("Change…")
@@ -85,22 +87,28 @@ class SettingsTab(QWidget):
         drow.addWidget(change)
         drow.addWidget(openb)
         sf.addRow("Data folder", drow)
-        root.addWidget(school)
+        root.addWidget(org)
 
-        cap = QGroupBox("Board camera")
+        cap = QGroupBox("Screen camera")
         cf = QFormLayout(cap)
         self.offset = QDoubleSpinBox()
         self.offset.setRange(0, 30)
-        self.offset.setSuffix(" min after the lesson starts")
+        self.offset.setSuffix(" min after the session starts")
         self.window = QDoubleSpinBox()
         self.window.setRange(0.5, 15)
         self.window.setSuffix(" min at most")
         self.pin = QLineEdit()
-        self.pin.setMaxLength(8)
+        self.pin.setMaxLength(12)
+        self.pin.setPlaceholderText("6 to 12 digits — needed before the first export")
+        new_pin = QPushButton("Suggest a PIN")
+        new_pin.clicked.connect(lambda: self.pin.setText(suggest_pin()))
+        pin_row = QHBoxLayout()
+        pin_row.addWidget(self.pin, 1)
+        pin_row.addWidget(new_pin)
         self.sound = QCheckBox("Play a soft sound when the camera starts and stops")
         cf.addRow("Open the camera", self.offset)
         cf.addRow("Keep it open", self.window)
-        cf.addRow("Board admin PIN", self.pin)
+        cf.addRow("Screens' admin PIN", pin_row)
         cf.addRow("", self.sound)
         root.addWidget(cap)
 
@@ -122,28 +130,35 @@ class SettingsTab(QWidget):
         self.photos = QSpinBox()
         self.photos.setRange(20, 300)
         self.photos.setSuffix(" photos (40 is enough)")
-        self.strict = QCheckBox("Strict capture: the student must follow the circle in a random order (slower)")
+        self.strict = QCheckBox("Strict capture: the person must follow the circle in a random order (slower)")
         self.gpu = QCheckBox("Use the graphics card (GPU) when available")
         tf.addRow("Training rounds (epochs)", self.epochs)
-        tf.addRow("Classroom-like variants", self.aug)
+        tf.addRow("Camera-like variants", self.aug)
         tf.addRow("Cross-validation folds", self.folds)
         tf.addRow("Repeats (seeds)", self.seeds)
         tf.addRow("Minimum accuracy to pass", self.min_acc)
-        tf.addRow("Photos per student", self.photos)
+        tf.addRow("Photos per person", self.photos)
         tf.addRow("", self.strict)
         tf.addRow("", self.gpu)
         self.providers = muted("")
         tf.addRow("Available", self.providers)
         root.addWidget(tr)
 
-        srv = QGroupBox("Server (optional — boards keep results on the board when empty)")
+        srv = QGroupBox("Server (optional — without one, the screens keep the results and you collect them by USB)")
         vf = QFormLayout(srv)
         self.server_url = QLineEdit()
-        self.server_url.setPlaceholderText("https://192.168.1.10")
+        self.server_url.setPlaceholderText("https://192.168.1.10   or   https://attendance.example.com")
         self.server_fp = QLineEdit()
-        self.server_fp.setPlaceholderText("SHA-256 fingerprint shown by the server (for its own certificate)")
+        self.server_fp.setPlaceholderText("only for a server with its own certificate (shown by show-cert-fingerprint)")
         vf.addRow("Server address", self.server_url)
         vf.addRow("Certificate fingerprint", self.server_fp)
+        vf.addRow(
+            "",
+            muted(
+                "Server in your own network: paste the fingerprint it shows. Server on the internet with a real "
+                "domain (for example a VPS, docs/server-vps.md): leave the fingerprint empty."
+            ),
+        )
         root.addWidget(srv)
 
         save = primary("Save settings")
@@ -155,8 +170,8 @@ class SettingsTab(QWidget):
         self.load()
 
     def load(self):
-        s = self.ctx.school.settings
-        self.school_name.setText(self.ctx.school.name)
+        s = self.ctx.org.settings
+        self.org_name.setText(self.ctx.org.name)
         self.data_dir.setText(str(self.ctx.data_dir))
         self.offset.setValue(s.capture_offset_min)
         self.window.setValue(s.capture_window_min)
@@ -167,7 +182,7 @@ class SettingsTab(QWidget):
         self.folds.setValue(s.folds)
         self.seeds.setValue(s.seeds)
         self.min_acc.setValue(s.min_accuracy * 100)
-        self.photos.setValue(s.photos_per_student)
+        self.photos.setValue(s.photos_per_person)
         self.strict.setChecked(s.strict_order)
         self.gpu.setChecked(self.ctx.prefer_gpu)
         self.server_url.setText(s.server_url)
@@ -189,28 +204,35 @@ class SettingsTab(QWidget):
         self.dl_btn.setText("Download models" if not self.ctx.models_ready else "Download again / missing models")
 
     def save(self):
-        if not self.pin.text().isdigit() or len(self.pin.text()) < 4:
-            return error(self, "The board admin PIN must be 4 to 8 digits.")
-        s = self.ctx.school.settings
+        pin = self.pin.text().strip()
+        if pin and not valid_pin(pin):
+            return error(self, "The screens' admin PIN must be 6 to 12 digits (or click “Suggest a PIN”).")
+        url = self.server_url.text().strip().rstrip("/")
+        if url and not url.lower().startswith("https://"):
+            return error(self, "The server address must start with https:// (the screens never send over plain http).")
+        fp = self.server_fp.text().strip().replace(":", "").replace(" ", "").lower()
+        if fp and not (len(fp) == 64 and all(c in "0123456789abcdef" for c in fp)):
+            return error(self, "The certificate fingerprint must be 64 letters and digits (or empty).")
+        s = self.ctx.org.settings
         s.capture_offset_min = self.offset.value()
         s.capture_window_min = self.window.value()
-        s.board_admin_pin = self.pin.text()
+        s.board_admin_pin = pin
         s.sound = self.sound.isChecked()
         s.epochs = self.epochs.value()
         s.augment_per_photo = self.aug.value()
         s.folds = self.folds.value()
         s.seeds = self.seeds.value()
         s.min_accuracy = self.min_acc.value() / 100
-        s.photos_per_student = self.photos.value()
+        s.photos_per_person = self.photos.value()
         s.strict_order = self.strict.isChecked()
-        s.server_url = self.server_url.text().strip().rstrip("/")
-        s.server_cert_sha256 = self.server_fp.text().strip().replace(":", "").lower()
-        self.ctx.school.settings = s
-        if self.school_name.text().strip():
-            self.ctx.school.name = self.school_name.text()
+        s.server_url = url
+        s.server_cert_sha256 = fp
+        self.ctx.org.settings = s
+        if self.org_name.text().strip():
+            self.ctx.org.name = self.org_name.text()
         self.ctx.prefer_gpu = self.gpu.isChecked()
         self.ctx.settings_changed.emit()
-        info(self, "Settings saved. Export the boards again so they get the new settings.")
+        info(self, "Settings saved. Export the screens again so they get the new settings.")
 
     def change_data_dir(self):
         d = QFileDialog.getExistingDirectory(self, "Choose the data folder")
@@ -249,7 +271,7 @@ class SettingsTab(QWidget):
             info(
                 self,
                 f"The face models are ready. The body-pose model could not be downloaded ({msg}); "
-                "boards will still work, without stick figures and head count.",
+                "screens will still work, without stick figures and head count.",
             )
         else:
             error(self, f"Download failed: {msg}\nCheck the internet connection and try again.")

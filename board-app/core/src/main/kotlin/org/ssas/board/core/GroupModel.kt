@@ -2,12 +2,17 @@ package org.ssas.board.core
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Base64
 
+/** One registered person of a group: the id and the name shown in results. */
 @Serializable
-data class StudentRef(val id: String, val name: String)
+data class PersonRef(val id: String, val name: String)
 
 @Serializable
 data class Matrix(val dtype: String, val shape: List<Int>, val data: String)
@@ -18,35 +23,38 @@ data class Thresholds(val accept: Float, val strong: Float, val margin: Float)
 @Serializable
 data class ModelRef(val file: String, val sha256: String)
 
+/** group-<code>.json as SSAS Studio writes it (format "ssas.group-model", version 2; docs/data-format.md). */
 @Serializable
-data class ClassModelFile(
+data class GroupModelFile(
     val format: String,
     val version: Int,
-    val class_code: String,
+    val group_code: String,
     val created_at: String,
     val method: String,
     val models: Map<String, ModelRef> = emptyMap(),
-    val students: List<StudentRef>,
+    val people: List<PersonRef>,
     val weights: Matrix,
     val thresholds: Thresholds,
 )
 
-/** Result of matching one face against a class. */
-data class Match(val studentIndex: Int?, val score: Float, val second: Float, val strong: Boolean)
+/** Result of matching one face against a group: the person's row, or null when nobody matched well enough. */
+data class Match(val personIndex: Int?, val score: Float, val second: Float, val strong: Boolean)
 
-/** The per-class model made by SSAS Studio (studio/ssas_studio/core/classmodel.py). */
-class ClassModel(val file: ClassModelFile) {
-    val code get() = file.class_code
-    val students get() = file.students
+/**
+ * The model of one group, trained by SSAS Studio (studio/ssas_studio/core/groupmodel.py): one row of 512 numbers
+ * per person. A face matches the person whose row is most similar, if that similarity passes the thresholds.
+ */
+class GroupModel(val file: GroupModelFile) {
+    val code get() = file.group_code
+    val people get() = file.people
     private val dim: Int
     private val rows: Array<FloatArray>
 
     init {
-        require(file.format == "ssas.class-model") { "Not a class model" }
-        require(file.version <= 1) { "Class model made by a newer SSAS Studio" }
+        checkFormat(file.format, file.version, FORMAT, VERSION, "group model")
         require(file.weights.dtype == "float32")
         val (n, d) = file.weights.shape
-        require(n == file.students.size) { "One weight row per student expected" }
+        require(n == file.people.size) { "One weight row per person expected" }
         dim = d
         val bb = ByteBuffer.wrap(Base64.getDecoder().decode(file.weights.data)).order(ByteOrder.LITTLE_ENDIAN)
         val fb = bb.asFloatBuffer()
@@ -72,7 +80,13 @@ class ClassModel(val file: ClassModelFile) {
     }
 
     companion object {
+        const val FORMAT = "ssas.group-model"
+        const val VERSION = 2
         private val json = Json { ignoreUnknownKeys = true }
-        fun parse(text: String) = ClassModel(json.decodeFromString(ClassModelFile.serializer(), text))
+        fun parse(text: String): GroupModel {
+            val tree = json.parseToJsonElement(text).jsonObject
+            checkFormat(tree["format"]?.jsonPrimitive?.contentOrNull, tree["version"]?.jsonPrimitive?.intOrNull, FORMAT, VERSION, "group model")
+            return GroupModel(json.decodeFromJsonElement(GroupModelFile.serializer(), tree))
+        }
     }
 }

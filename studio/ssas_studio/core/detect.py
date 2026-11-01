@@ -1,7 +1,7 @@
 """SCRFD face detector (InsightFace det_10g) — boxes, scores and 5 landmarks.
 
 Ported from insightface/python-package/insightface/model_zoo/scrfd.py.
-The board app has a Kotlin port with the same maths (Scrfd.kt).
+The screen app has a Kotlin port with the same maths (Scrfd.kt).
 """
 
 from __future__ import annotations

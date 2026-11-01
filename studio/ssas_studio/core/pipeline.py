@@ -1,4 +1,4 @@
-"""From student photos on disk to a trained class model."""
+"""From the photos of a group's people on disk to a trained group model."""
 
 from __future__ import annotations
 
@@ -14,15 +14,15 @@ import numpy as np
 
 from .. import __version__
 from ..logs import get_logger
-from . import classmodel
+from . import groupmodel
 from .align import norm_crop
 from .augment import augment
 from .detect import FaceDetector, detect_size_for
 from .embed import FaceEmbedder
 from .landmarks import LandmarkModel
 from .models import MODELS, gpu_name, make_session, model_path, sha256_file
-from .storage import School, now_iso
-from .train import Cancelled, Dataset, TrainConfig, find_lookalikes, train_class
+from .storage import Organisation, now_iso
+from .train import Cancelled, Dataset, TrainConfig, find_lookalikes, train_group
 
 log = get_logger("pipeline")
 ProgressFn = Callable[[str, float], None]
@@ -71,7 +71,7 @@ class FaceEngine:
 
 @dataclass
 class PhotoProblem:
-    student: str
+    person: str
     photo: str
     problem: str
 
@@ -84,141 +84,141 @@ def _photo_key(paths: list[Path]) -> str:
     return h.hexdigest()
 
 
-def build_class_embeddings(
-    school: School,
+def build_group_embeddings(
+    org: Organisation,
     code: str,
     engine: FaceEngine,
     augment_per_photo: int,
     progress: ProgressFn | None = None,
     cancel: CancelFn | None = None,
 ) -> tuple[Dataset, list[dict], list[PhotoProblem]]:
-    """Detect, align, augment and embed every photo of the class (cached in model/embeddings.npz)."""
-    c = school.load_class(code)
-    students = [s for s in c.students if school.photos(code, s)]
-    all_photos = [p for s in students for p in school.photos(code, s)]
+    """Detect, align, augment and embed every photo of the group (cached in model/embeddings.npz)."""
+    g = org.load_group(code)
+    people = [p for p in g.people if org.photos(code, p)]
+    all_photos = [photo for p in people for photo in org.photos(code, p)]
     key = f"v{CACHE_VERSION}:{augment_per_photo}:{engine.model_info('embedder')['sha256']}:{_photo_key(all_photos)}"
-    cache = school.model_dir(code) / "embeddings.npz"
+    cache = org.model_dir(code) / "embeddings.npz"
     problems: list[PhotoProblem] = []
-    student_rows = [{"id": s.id, "name": s.name} for s in students]
+    person_rows = [{"id": p.id, "name": p.name} for p in people]
 
     if cache.exists():
         z = np.load(cache, allow_pickle=False)
         if str(z["key"]) == key:
-            ds = Dataset(z["emb"], z["label"], z["group"], len(students))
+            ds = Dataset(z["emb"], z["label"], z["group"], len(people))
             probs = [PhotoProblem(*row) for row in z["problems"].tolist()] if "problems" in z else []
-            return ds, student_rows, probs
+            return ds, person_rows, probs
 
     rng = np.random.default_rng(1234)
-    embs, labels, groups, is_aug = [], [], [], []
+    embs, labels, photo_ids, is_aug = [], [], [], []
     total = max(1, len(all_photos))
     done = 0
-    gid = 0
-    for si, s in enumerate(students):
-        for photo in school.photos(code, s):
+    photo_id = 0
+    for pi, person in enumerate(people):
+        for photo in org.photos(code, person):
             if cancel and cancel():
                 raise Cancelled()
             img = cv2.imdecode(np.fromfile(str(photo), dtype=np.uint8), cv2.IMREAD_COLOR)
             done += 1
             if img is None:
-                problems.append(PhotoProblem(s.name, photo.name, "cannot read the file"))
+                problems.append(PhotoProblem(person.name, photo.name, "cannot read the file"))
                 continue
             faces = engine.detect(img)
             if not faces:
-                problems.append(PhotoProblem(s.name, photo.name, "no face found"))
+                problems.append(PhotoProblem(person.name, photo.name, "no face found"))
                 continue
             crop = norm_crop(img, faces[0].kps)
             crops = [crop] + [augment(crop, rng) for _ in range(augment_per_photo)]
             e = engine.embedder.embed(crops)
             embs.append(e)
-            labels.extend([si] * len(crops))
-            groups.extend([gid] * len(crops))
+            labels.extend([pi] * len(crops))
+            photo_ids.extend([photo_id] * len(crops))
             is_aug.extend([0] + [1] * augment_per_photo)
-            gid += 1
+            photo_id += 1
             if progress:
-                progress(f"Reading photos of {s.name}", done / total)
+                progress(f"Reading photos of {person.name}", done / total)
     emb = np.concatenate(embs) if embs else np.zeros((0, 512), np.float32)
-    ds = Dataset(emb.astype(np.float32), np.array(labels, np.int64), np.array(groups, np.int64), len(students))
+    ds = Dataset(emb.astype(np.float32), np.array(labels, np.int64), np.array(photo_ids, np.int64), len(people))
     cache.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         cache,
         key=np.array(key),
         emb=ds.emb,
         label=ds.label,
-        group=ds.group,
+        group=ds.photo,  # the key keeps its 0.1 name so existing caches stay valid
         aug=np.array(is_aug, np.int8),
-        ids=np.array([s.id for s in students]),
-        problems=np.array([[p.student, p.photo, p.problem] for p in problems] or np.zeros((0, 3)), dtype=str),
+        ids=np.array([p.id for p in people]),
+        problems=np.array([[p.person, p.photo, p.problem] for p in problems] or np.zeros((0, 3)), dtype=str),
     )
-    return ds, student_rows, problems
+    return ds, person_rows, problems
 
 
-def stranger_embeddings(school: School, exclude: str, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
-    """Embeddings of students from the other classes (from their caches)."""
-    embs, groups = [], []
+def stranger_embeddings(org: Organisation, exclude: str, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+    """Embeddings of the people of the other groups (from their caches), with their photo ids."""
+    embs, photo_ids = [], []
     offset = 0
-    for code in school.class_codes():
+    for code in org.group_codes():
         if code == exclude:
             continue
-        cache = school.model_dir(code) / "embeddings.npz"
+        cache = org.model_dir(code) / "embeddings.npz"
         if not cache.exists():
             continue
         z = np.load(cache, allow_pickle=False)
         embs.append(z["emb"])
-        groups.append(z["group"] + offset)
+        photo_ids.append(z["group"] + offset)
         offset += int(z["group"].max()) + 1 if len(z["group"]) else 0
     if not embs:
         return np.zeros((0, 512), np.float32), np.zeros((0,), np.int64)
     emb = np.concatenate(embs)
-    grp = np.concatenate(groups)
+    photo = np.concatenate(photo_ids)
     if len(emb) > MAX_STRANGERS:
         idx = rng.choice(len(emb), MAX_STRANGERS, replace=False)
-        emb, grp = emb[idx], grp[idx]
-    return emb.astype(np.float32), grp.astype(np.int64)
+        emb, photo = emb[idx], photo[idx]
+    return emb.astype(np.float32), photo.astype(np.int64)
 
 
-def school_centroids(school: School) -> dict[str, np.ndarray]:
-    """Average face of every student who has cached embeddings (for the look-alike check)."""
+def org_centroids(org: Organisation) -> dict[str, np.ndarray]:
+    """Average face of every person who has cached embeddings (for the look-alike check)."""
     out = {}
-    for code in school.class_codes():
-        cache = school.model_dir(code) / "embeddings.npz"
+    for code in org.group_codes():
+        cache = org.model_dir(code) / "embeddings.npz"
         if not cache.exists():
             continue
         z = np.load(cache, allow_pickle=False)
         if "ids" not in z:
             continue
         ids, emb, label, aug = z["ids"], z["emb"], z["label"], z["aug"]
-        names = {s.id: s.name for s in school.load_class(code).students}
-        for i, sid in enumerate(ids.tolist()):
+        names = {p.id: p.name for p in org.load_group(code).people}
+        for i, pid in enumerate(ids.tolist()):
             sel = emb[(label == i) & (aug == 0)]
             if len(sel):
-                out[f"{code} · {names.get(sid, sid)}"] = sel.mean(axis=0)
+                out[f"{code} · {names.get(pid, pid)}"] = sel.mean(axis=0)
     return out
 
 
 def train_and_save(
-    school: School, code: str, engine: FaceEngine, progress: ProgressFn | None = None, cancel: CancelFn | None = None
+    org: Organisation, code: str, engine: FaceEngine, progress: ProgressFn | None = None, cancel: CancelFn | None = None
 ) -> dict:
-    """Build embeddings, train, and write model/class-model.json + model/report.json."""
+    """Build embeddings, train, and write model/group-model.json + model/report.json."""
     started = time.time()
-    st = school.settings
+    st = org.settings
     log.info("Training %s on %s", code, engine.device)
     cfg = TrainConfig(epochs=st.epochs, folds=st.folds, seeds=st.seeds, min_accuracy=st.min_accuracy)
 
     def sub(lo, hi):
         return (lambda msg, f: progress(msg, lo + (hi - lo) * f)) if progress else None
 
-    ds, students, problems = build_class_embeddings(school, code, engine, st.augment_per_photo, sub(0.0, 0.4), cancel)
-    if ds.num_students == 0 or len(ds.emb) == 0:
-        raise ValueError("No usable photos in this class yet. Capture photos first.")
-    if ds.num_students == 1:
-        raise ValueError("At least two students with photos are needed to train a class model.")
-    ds.neg, ds.neg_group = stranger_embeddings(school, code, np.random.default_rng(7))
-    log.info("%s: %d students, %d samples, %d strangers", code, ds.num_students, len(ds.emb), len(ds.neg))
-    result = train_class(ds, cfg, sub(0.4, 1.0), cancel)
+    ds, people, problems = build_group_embeddings(org, code, engine, st.augment_per_photo, sub(0.0, 0.4), cancel)
+    if ds.num_people == 0 or len(ds.emb) == 0:
+        raise ValueError("No usable photos in this group yet. Capture photos first.")
+    if ds.num_people == 1:
+        raise ValueError("At least two people with photos are needed to train a group model.")
+    ds.neg, ds.neg_photo = stranger_embeddings(org, code, np.random.default_rng(7))
+    log.info("%s: %d people, %d samples, %d strangers", code, ds.num_people, len(ds.emb), len(ds.neg))
+    result = train_group(ds, cfg, sub(0.4, 1.0), cancel)
 
-    model = classmodel.build(
-        class_code=code,
-        students=students,
+    model = groupmodel.build(
+        group_code=code,
+        people=people,
         weights=result.weights,
         thresholds={"accept": round(result.accept, 4), "strong": round(result.strong, 4), "margin": result.margin},
         metrics={k: v for k, v in result.metrics.items() if k != "method_scores"},
@@ -227,20 +227,18 @@ def train_and_save(
         created_at=now_iso(),
         studio_version=__version__,
     )
-    classmodel.write(school.model_dir(code) / "class-model.json", model)
+    groupmodel.write(org.model_dir(code) / groupmodel.FILE_NAME, model)
 
-    photo_counts = {s["id"]: 0 for s in students}
-    groups_per_student: dict[int, set] = {}
-    for lbl, grp in zip(ds.label.tolist(), ds.group.tolist(), strict=True):
-        groups_per_student.setdefault(lbl, set()).add(grp)
-    for i, s in enumerate(students):
-        photo_counts[s["id"]] = len(groups_per_student.get(i, ()))
+    photo_counts = {p["id"]: 0 for p in people}
+    photos_per_person: dict[int, set] = {}
+    for lbl, photo in zip(ds.label.tolist(), ds.photo.tolist(), strict=True):
+        photos_per_person.setdefault(lbl, set()).add(photo)
+    for i, p in enumerate(people):
+        photo_counts[p["id"]] = len(photos_per_person.get(i, ()))
 
-    lookalikes = [
-        {"a": a, "b": b, "similarity": round(sim, 3)} for a, b, sim in find_lookalikes(school_centroids(school))
-    ]
+    lookalikes = [{"a": a, "b": b, "similarity": round(sim, 3)} for a, b, sim in find_lookalikes(org_centroids(org))]
     report = {
-        "class_code": code,
+        "group_code": code,
         "created_at": now_iso(),
         "duration_s": round(time.time() - started, 1),
         "device": engine.device,
@@ -251,28 +249,26 @@ def train_and_save(
         "augment_per_photo": st.augment_per_photo,
         "thresholds": model["thresholds"],
         "metrics": result.metrics,
-        "students": [
+        "people": [
             {
-                "id": s["id"],
-                "name": s["name"],
-                "photos": photo_counts[s["id"]],
-                "recall": round(result.per_student_recall[i], 4) if i < len(result.per_student_recall) else None,
+                "id": p["id"],
+                "name": p["name"],
+                "photos": photo_counts[p["id"]],
+                "recall": round(result.per_person_recall[i], 4) if i < len(result.per_person_recall) else None,
             }
-            for i, s in enumerate(students)
+            for i, p in enumerate(people)
         ],
-        "weak_students": [
-            s["name"]
-            for i, s in enumerate(students)
-            if i < len(result.per_student_recall) and result.per_student_recall[i] < 0.9
+        "weak_people": [
+            p["name"]
+            for i, p in enumerate(people)
+            if i < len(result.per_person_recall) and result.per_person_recall[i] < 0.9
         ],
         "photo_problems": [p.__dict__ for p in problems],
         "lookalikes": lookalikes,
         "strangers_used": int(len(ds.neg)),
         "passed": bool(result.metrics.get("passed")),
     }
-    (school.model_dir(code) / "report.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    (org.model_dir(code) / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     log.info(
         "Trained %s: accuracy %.3f on %s in %.0f s",
         code,

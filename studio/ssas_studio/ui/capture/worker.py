@@ -1,4 +1,4 @@
-"""Camera I/O for the Capture tab. The decisions are made by ``core.student_capture.StudentCapture``."""
+"""Camera I/O for the Capture tab. The decisions are made by ``core.person_capture.PersonCapture``."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from PySide6.QtGui import QImage
 
 from ...core.capture_logic import RING_SEGMENTS, CaptureSession
 from ...core.landmarks import eye_openness, head_pose
+from ...core.person_capture import AutoStart, FrameResult, Measurement, PersonCapture
 from ...core.quality import check_face, crop_for_storage
-from ...core.student_capture import AutoStart, FrameResult, Measurement, StudentCapture
 from ...logs import get_logger
 from ..context import AppContext
 
@@ -46,8 +46,8 @@ class CameraProbe(QThread):
 
 
 def new_session(settings) -> CaptureSession:
-    """A fresh capture session for one student, sized from the "photos per student" setting."""
-    n = settings.photos_per_student
+    """A fresh capture session for one person, sized from the "photos per person" setting."""
+    n = settings.photos_per_person
     per_part = max(1, (n - 8) // RING_SEGMENTS)
     return CaptureSession(
         photos_per_segment=per_part,
@@ -57,13 +57,13 @@ def new_session(settings) -> CaptureSession:
 
 
 class CameraWorker(QThread):
-    """Reads the camera, asks ``StudentCapture`` what to do with every frame, saves the photos it asks for.
+    """Reads the camera, asks ``PersonCapture`` what to do with every frame, saves the photos it asks for.
 
-    The tab tells it whose turn it is with ``set_student``. Nothing here touches widgets: results go out as signals.
+    The tab tells it whose turn it is with ``set_person``. Nothing here touches widgets: results go out as signals.
     """
 
     frame = Signal(QImage, object, list)  # mirrored picture, FrameResult, face boxes in picture coordinates
-    student_done = Signal(str)  # student id
+    person_done = Signal(str)  # person id
     stopped = Signal(str)  # why the camera stopped (emitted last)
 
     def __init__(self, ctx: AppContext, camera_index: int):
@@ -72,16 +72,16 @@ class CameraWorker(QThread):
         self.camera_index = camera_index
         self._running = True
         self._lock = threading.Lock()
-        self._student: tuple[str, str, Path] | None = None  # id, name, photo folder
+        self._person: tuple[str, str, Path] | None = None  # id, name, photo folder
         self._skip = False
 
     # ----- called from the window -----
     def stop(self) -> None:
         self._running = False
 
-    def set_student(self, student_id: str | None, name: str = "", folder: Path | None = None) -> None:
+    def set_person(self, person_id: str | None, name: str = "", folder: Path | None = None) -> None:
         with self._lock:
-            self._student = (student_id, name, folder) if student_id else None
+            self._person = (person_id, name, folder) if person_id else None
 
     def skip(self) -> None:
         self._skip = True
@@ -109,8 +109,8 @@ class CameraWorker(QThread):
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-        settings = self.ctx.school.settings
-        capture = StudentCapture(lambda: new_session(settings), auto_start=AutoStart())
+        settings = self.ctx.org.settings
+        capture = PersonCapture(lambda: new_session(settings), auto_start=AutoStart())
         current_id = None
         try:
             while self._running:
@@ -118,10 +118,10 @@ class CameraWorker(QThread):
                 if not ok or img is None:
                     return "The camera stopped sending pictures."
                 with self._lock:
-                    student = self._student
-                if student is None or student[0] != current_id:
-                    current_id = student[0] if student else None
-                    capture.set_student(student[1] if student else None)
+                    person = self._person
+                if person is None or person[0] != current_id:
+                    current_id = person[0] if person else None
+                    capture.set_person(person[1] if person else None)
                 if self._skip:
                     self._skip = False
                     capture.skip()
@@ -132,12 +132,12 @@ class CameraWorker(QThread):
                     [f.width for f in faces], time.monotonic(), partial(self._measure, engine, img, main)
                 )
                 if result.save_as and main is not None:
-                    self._save_photo(student[2] / result.save_as, img, main)
+                    self._save_photo(person[2] / result.save_as, img, main)
                 self._emit_frame(img, result, faces)
-                if result.student_done:
+                if result.person_done:
                     done_id, current_id = current_id, None
-                    self.set_student(None)  # the tab picks the next student
-                    self.student_done.emit(done_id)
+                    self.set_person(None)  # the tab picks the next person
+                    self.person_done.emit(done_id)
         finally:
             cap.release()
         return None
@@ -164,7 +164,7 @@ class CameraWorker(QThread):
             encoded.tofile(str(path))  # works with Arabic folder names on Windows
 
     def _emit_frame(self, img, result: FrameResult, faces) -> None:
-        mirrored = cv2.flip(img, 1)  # like a mirror, so students can steer by what they see
+        mirrored = cv2.flip(img, 1)  # like a mirror, so people can steer by what they see
         h, w = mirrored.shape[:2]
         rgb = cv2.cvtColor(mirrored, cv2.COLOR_BGR2RGB)
         picture = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888).copy()

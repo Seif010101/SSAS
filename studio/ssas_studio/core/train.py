@@ -1,9 +1,9 @@
-"""Train one recognition model per class.
+"""Train one recognition model per group.
 
-The face embedder (ArcFace) is fixed. What we train for each class is a small
-"head": one direction per student in the 512-d embedding space, learned with a
+The face embedder (ArcFace) is fixed. What we train for each group is a small
+"head": one direction per person in the 512-d embedding space, learned with a
 margin loss over thousands of augmented photos for many epochs, while photos of
-students from *other* classes are pushed away so the board rejects strangers.
+people from *other* groups are pushed away so the screen rejects strangers.
 
 Quality is measured with grouped K-fold cross-validation (all variants of one
 photo stay in the same fold) repeated with several random seeds, and the
@@ -45,29 +45,29 @@ class TrainConfig:
 @dataclass
 class Dataset:
     emb: np.ndarray  # (N, 512) unit vectors
-    label: np.ndarray  # (N,) student index
-    group: np.ndarray  # (N,) photo id — augmentations of one photo share it
-    num_students: int
+    label: np.ndarray  # (N,) person index
+    photo: np.ndarray  # (N,) photo id — augmentations of one photo share it
+    num_people: int
     neg: np.ndarray = field(default_factory=lambda: np.zeros((0, 512), np.float32))  # strangers
-    neg_group: np.ndarray = field(default_factory=lambda: np.zeros((0,), np.int64))
+    neg_photo: np.ndarray = field(default_factory=lambda: np.zeros((0,), np.int64))
 
 
 @dataclass
 class TrainResult:
     method: str  # "head" or "prototype"
-    weights: np.ndarray  # (S, 512) unit vectors, row i = student i
+    weights: np.ndarray  # (S, 512) unit vectors, row i = person i
     accept: float
     strong: float
     margin: float
     metrics: dict
-    per_student_recall: list[float]
+    per_person_recall: list[float]
 
 
 def _normalize(m: np.ndarray) -> np.ndarray:
     return m / np.linalg.norm(m, axis=-1, keepdims=True).clip(min=1e-12)
 
 
-def class_means(emb: np.ndarray, label: np.ndarray, s: int) -> np.ndarray:
+def person_means(emb: np.ndarray, label: np.ndarray, s: int) -> np.ndarray:
     w = np.zeros((s, emb.shape[1]), np.float64)
     for i in range(s):
         sel = emb[label == i]
@@ -88,7 +88,7 @@ def train_head(
     """Cosine classifier with additive margin (CosFace) + a stranger-rejection term. Adam, numpy only."""
     rng = np.random.default_rng(seed)
     x = x.astype(np.float32)
-    w = class_means(x, y, s).astype(np.float64) + rng.normal(0, 0.01, (s, x.shape[1]))
+    w = person_means(x, y, s).astype(np.float64) + rng.normal(0, 0.01, (s, x.shape[1]))
     m_t = np.zeros_like(w)
     v_t = np.zeros_like(w)
     b1, b2, eps = 0.9, 0.999, 1e-8
@@ -150,19 +150,19 @@ def _top2(c: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return top_i, top, second
 
 
-def _grouped_folds(group: np.ndarray, k: int, seed: int) -> list[np.ndarray]:
-    uniq = np.unique(group)
+def _photo_folds(photo: np.ndarray, k: int, seed: int) -> list[np.ndarray]:
+    uniq = np.unique(photo)
     rng = np.random.default_rng(seed)
     rng.shuffle(uniq)
     fold_of = {g: i % k for i, g in enumerate(uniq)}
-    f = np.array([fold_of[g] for g in group])
+    f = np.array([fold_of[g] for g in photo])
     return [np.where(f == i)[0] for i in range(k)]
 
 
 @dataclass
 class _Pooled:
-    genuine: list = field(default_factory=list)  # score of the true student
-    within: list = field(default_factory=list)  # best wrong-student score (same class)
+    genuine: list = field(default_factory=list)  # score of the true person
+    within: list = field(default_factory=list)  # best wrong-person score (same group)
     stranger: list = field(default_factory=list)  # best score for a stranger photo
     top_i: list = field(default_factory=list)
     top: list = field(default_factory=list)
@@ -204,7 +204,7 @@ def _calibrate(pooled: _Pooled, cfg: TrainConfig) -> tuple[float, float, dict, l
     wrong = accepted & (ti != y)
     metrics = {
         "accuracy": float(correct.mean()) if len(y) else 0.0,
-        "wrong_student_rate": float(wrong.mean()) if len(y) else 0.0,
+        "wrong_person_rate": float(wrong.mean()) if len(y) else 0.0,
         "stranger_accept_rate": float((stranger >= accept).mean()) if len(stranger) else None,
         "samples": int(len(y)),
         "stranger_samples": int(len(stranger)),
@@ -226,8 +226,8 @@ def cross_validate(
     pooled = _Pooled()
     seeds = cfg.seeds if method == "head" else 1
     for seed in range(seeds):
-        folds = _grouped_folds(ds.group, cfg.folds, seed)
-        neg_folds = _grouped_folds(ds.neg_group, cfg.folds, seed) if len(ds.neg) else [np.zeros(0, int)] * cfg.folds
+        folds = _photo_folds(ds.photo, cfg.folds, seed)
+        neg_folds = _photo_folds(ds.neg_photo, cfg.folds, seed) if len(ds.neg) else [np.zeros(0, int)] * cfg.folds
         for k in range(cfg.folds):
             val = folds[k]
             if len(val) == 0:
@@ -248,28 +248,28 @@ def cross_validate(
 
             if method == "head":
                 w = train_head(
-                    ds.emb[train], ds.label[train], ds.num_students, ds.neg[neg_train], cfg, seed * 100 + k, tick
+                    ds.emb[train], ds.label[train], ds.num_people, ds.neg[neg_train], cfg, seed * 100 + k, tick
                 )
             else:
-                w = class_means(ds.emb[train], ds.label[train], ds.num_students)
+                w = person_means(ds.emb[train], ds.label[train], ds.num_people)
                 tick()
             pooled.add(w, ds.emb[val], ds.label[val], ds.neg[neg_val])
     return _calibrate(pooled, cfg)
 
 
-def train_class(
+def train_group(
     ds: Dataset, cfg: TrainConfig, progress: ProgressFn | None = None, cancel: CancelFn | None = None
 ) -> TrainResult:
     """Cross-validate both methods, keep the better one, then train it on all photos."""
-    if ds.num_students < 1:
-        raise ValueError("The class has no students with usable photos.")
+    if ds.num_people < 1:
+        raise ValueError("The group has no people with usable photos.")
     total = cfg.seeds * cfg.folds * cfg.epochs + cfg.folds + cfg.seeds * cfg.epochs
     done = [0]
     head_cv = cross_validate(ds, cfg, "head", progress, cancel, done, total)
     proto_cv = cross_validate(ds, cfg, "prototype", progress, cancel, done, total)
 
     def score(cv):
-        return cv[2]["accuracy"] - cv[2]["wrong_student_rate"] * 5
+        return cv[2]["accuracy"] - cv[2]["wrong_person_rate"] * 5
 
     method, (accept, strong, metrics, recall) = (
         ("head", head_cv) if score(head_cv) >= score(proto_cv) else ("prototype", proto_cv)
@@ -286,10 +286,10 @@ def train_class(
                 if progress:
                     progress(f"Final training, round {seed + 1} of {cfg.seeds}", done[0] / total)
 
-            runs.append(train_head(ds.emb, ds.label, ds.num_students, ds.neg, cfg, 10_000 + seed, tick))
+            runs.append(train_head(ds.emb, ds.label, ds.num_people, ds.neg, cfg, 10_000 + seed, tick))
         weights = _normalize(np.mean(runs, axis=0)).astype(np.float32)
     else:
-        weights = class_means(ds.emb, ds.label, ds.num_students)
+        weights = person_means(ds.emb, ds.label, ds.num_people)
     if progress:
         progress("Done", 1.0)
 
@@ -303,7 +303,7 @@ def train_class(
 
 
 def find_lookalikes(centroids: dict[str, np.ndarray], threshold: float = 0.6) -> list[tuple[str, str, float]]:
-    """Pairs of students (anywhere in the school) whose average faces are suspiciously similar."""
+    """Pairs of people (anywhere in the organisation) whose average faces are suspiciously similar."""
     keys = list(centroids)
     if len(keys) < 2:
         return []

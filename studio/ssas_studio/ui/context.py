@@ -8,14 +8,14 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QSettings, Signal
 
 from ..core.models import missing_models
-from ..core.storage import School
+from ..core.storage import Organisation
 from ..resources import APP_NAME, ORG_NAME, bundled_apk, default_data_dir, default_models_dir
 
 
 class AppContext(QObject):
-    classes_changed = Signal()  # classes or students were added / removed / renamed
-    photos_changed = Signal(str)  # class code
-    model_changed = Signal(str)  # class code
+    groups_changed = Signal()  # groups or people were added / removed / renamed
+    photos_changed = Signal(str)  # group code
+    model_changed = Signal(str)  # group code
     settings_changed = Signal()
 
     def __init__(self, data_dir: Path | None = None, models_dir: Path | None = None):
@@ -23,18 +23,18 @@ class AppContext(QObject):
         self.qsettings = QSettings(ORG_NAME, APP_NAME)
         data_dir = data_dir or Path(self.qsettings.value("data_dir", str(default_data_dir())))
         self.models_dir = Path(models_dir or default_models_dir())
-        self.school = School(data_dir)
+        self.org = Organisation(data_dir)
         self._engine = None
         self._engine_lock = threading.Lock()
 
     @property
     def data_dir(self) -> Path:
-        return self.school.root
+        return self.org.root
 
     def set_data_dir(self, path: Path) -> None:
         self.qsettings.setValue("data_dir", str(path))
-        self.school = School(path)
-        self.classes_changed.emit()
+        self.org = Organisation(path)
+        self.groups_changed.emit()
         self.settings_changed.emit()
 
     @property

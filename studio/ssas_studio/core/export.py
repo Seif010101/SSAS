@@ -1,11 +1,11 @@
-"""Write the USB folder that the boards import (see docs/data-format.md).
+"""Write the USB folder that the screens import (formats in docs/data-format.md, all version 2).
 
 SSAS-USB/
-    ssas-usb.json
-    ssas-board.apk
+    ssas-usb.json                       which screens are on this stick
+    ssas-board.apk                      the screen app
     models/  det_10g.onnx  w600k_r50.onnx  [rtmo-s.onnx]  models.json
-    screens/<board>/board.json  class-<code>.json ...
-    server/boards.json
+    screens/<screen>/board.json  group-<code>.json ...
+    server/boards.json                  for the server's Boards page (no photos, no face data)
 """
 
 from __future__ import annotations
@@ -18,12 +18,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import __version__
-from . import classmodel
+from . import groupmodel
 from .models import MODELS, sha256_file
-from .storage import School, now_iso
+from .storage import Organisation, now_iso, valid_pin
 
 BOARD_FORMAT = "ssas.board"
-BOARD_VERSION = 1
+FORMAT_VERSION = 2
 USB_FOLDER = "SSAS-USB"
 
 ProgressFn = Callable[[str, float], None]
@@ -31,44 +31,65 @@ ProgressFn = Callable[[str, float], None]
 
 @dataclass
 class BoardPlan:
+    """What one screen does: its own group's sessions, or the sessions of the groups that visit a shared room."""
+
     code: str
-    kind: str  # "class" or "lab"
+    kind: str  # "group" (the room of one group) or "shared" (a room several groups use)
     name: str
-    classes: set[str] = field(default_factory=set)
-    slots: list[dict] = field(default_factory=list)  # {"day", "period", "class_code"}
+    groups: set[str] = field(default_factory=set)
+    slots: list[dict] = field(default_factory=list)  # {"day", "session", "group_code"}
 
 
-def board_plans(school: School) -> tuple[dict[str, BoardPlan], list[str]]:
-    """Which class each board takes attendance for, in which periods. Returns (plans, problems)."""
+def board_plans(org: Organisation) -> tuple[dict[str, BoardPlan], list[str]]:
+    """Which group each screen takes attendance for, in which sessions. Returns (plans, problems)."""
     problems: list[str] = []
     plans: dict[str, BoardPlan] = {}
-    labs = {lab["code"]: lab for lab in school.labs}
-    for code in school.class_codes():
-        plans[code] = BoardPlan(code, "class", code, {code})
-    for code, lab in labs.items():
-        plans[code] = BoardPlan(code, "lab", lab.get("name") or code)
+    rooms = {r["code"]: r for r in org.shared_rooms}
+    for code in org.group_codes():
+        plans[code] = BoardPlan(code, "group", code, {code})
+    for code, room in rooms.items():
+        plans[code] = BoardPlan(code, "shared", room.get("name") or code)
     taken: dict[tuple[str, int, int], str] = {}
-    for code in school.class_codes():
-        c = school.load_class(code)
-        for day in school.school_days:
-            for p in school.class_periods():
-                cell = c.timetable.get(str(day), {}).get(str(p["number"]), "here")
+    for code in org.group_codes():
+        g = org.load_group(code)
+        for day in org.days:
+            for s in org.attendance_sessions():
+                cell = g.timetable.get(str(day), {}).get(str(s["number"]), "here")
                 if cell == "skip":
                     continue
                 board = code if cell == "here" else cell
                 if board not in plans:
-                    problems.append(f"{code}: unknown lab '{cell}' on day {day}, period {p['number']}")
+                    problems.append(f"{code}: unknown shared room '{cell}' on day {day}, session {s['number']}")
                     continue
-                key = (board, day, p["number"])
+                key = (board, day, s["number"])
                 if key in taken:
                     problems.append(
-                        f"{board}: both {taken[key]} and {code} are scheduled on day {day}, period {p['number']}"
+                        f"{board}: both {taken[key]} and {code} are scheduled on day {day}, session {s['number']}"
                     )
                     continue
                 taken[key] = code
-                plans[board].classes.add(code)
-                plans[board].slots.append({"day": day, "period": p["number"], "class_code": code})
+                plans[board].groups.add(code)
+                plans[board].slots.append({"day": day, "session": s["number"], "group_code": code})
     return plans, problems
+
+
+def check_ready(org: Organisation, boards: list[str]) -> list[str]:
+    """Reasons the export cannot start yet (empty when it can)."""
+    st = org.settings
+    reasons = []
+    if not valid_pin(st.board_admin_pin):
+        reasons.append("Set the screens' admin PIN (6 or more digits) in Settings first.")
+    if st.server_url and not st.server_url.lower().startswith("https://"):
+        reasons.append("The server address in Settings must start with https://")
+    plans, _ = board_plans(org)
+    for b in boards:
+        if b not in plans:
+            reasons.append(f"Unknown screen: {b}")
+            continue
+        for code in sorted(plans[b].groups):
+            if not (org.model_dir(code) / groupmodel.FILE_NAME).exists():
+                reasons.append(f"Group {code} has no trained model yet (needed by screen {b}). Train it first.")
+    return reasons
 
 
 def _sha256_text(s: str) -> str:
@@ -84,28 +105,23 @@ def _copy_if_changed(src: Path, dst: Path, sha: str) -> None:
 
 
 def export_usb(
-    school: School,
+    org: Organisation,
     target: Path,
     boards: list[str],
     models_dir: Path,
     apk: Path | None,
     progress: ProgressFn | None = None,
 ) -> dict:
-    """Export the chosen boards to ``target``/SSAS-USB. Returns a summary dict."""
-    plans, problems = board_plans(school)
-    missing = [b for b in boards if b not in plans]
-    if missing:
-        raise ValueError(f"Unknown boards: {', '.join(missing)}")
-    for b in boards:
-        for code in plans[b].classes:
-            if not (school.model_dir(code) / "class-model.json").exists():
-                raise ValueError(f"Class {code} has no trained model yet (needed by board {b}). Train it first.")
+    """Export the chosen screens to ``target``/SSAS-USB. Returns a summary dict."""
+    reasons = check_ready(org, boards)
+    if reasons:
+        raise ValueError("\n".join(reasons))
+    plans, problems = board_plans(org)
 
     root = Path(target) / USB_FOLDER
-    (root / "models").mkdir(parents=True, exist_ok=True)
-    (root / "screens").mkdir(parents=True, exist_ok=True)
-    (root / "server").mkdir(parents=True, exist_ok=True)
-    st = school.settings
+    for sub in ("models", "screens", "server"):
+        (root / sub).mkdir(parents=True, exist_ok=True)
+    st = org.settings
 
     def step(msg, f):
         if progress:
@@ -124,44 +140,40 @@ def export_usb(
     (root / "models" / "models.json").write_text(json.dumps(model_entries, indent=2), encoding="utf-8")
 
     if apk and Path(apk).exists():
-        step("Copying the board app", 0.6)
+        step("Copying the screen app", 0.6)
         shutil.copyfile(apk, root / "ssas-board.apk")
 
     server_boards = []
     for i, b in enumerate(boards):
         plan = plans[b]
-        step(f"Writing board {b}", 0.65 + 0.3 * i / max(1, len(boards)))
+        step(f"Writing screen {b}", 0.65 + 0.3 * i / max(1, len(boards)))
         folder = root / "screens" / b
         if folder.exists():
             shutil.rmtree(folder)
         folder.mkdir(parents=True)
-        class_files = []
-        for code in sorted(plan.classes):
-            model = classmodel.read(school.model_dir(code) / "class-model.json")
-            name = f"class-{code}.json"
-            classmodel.write(folder / name, model)
-            class_files.append(
-                {
-                    "class_code": code,
-                    "file": name,
-                    "sha256": sha256_file(folder / name),
-                    "students": len(model["students"]),
-                }
+        group_files, people = [], {}
+        for code in sorted(plan.groups):
+            model = groupmodel.read(org.model_dir(code) / groupmodel.FILE_NAME)
+            name = f"group-{code}.json"
+            groupmodel.write(folder / name, model)
+            group_files.append(
+                {"group_code": code, "file": name, "sha256": sha256_file(folder / name), "people": len(model["people"])}
             )
-        token = school.board_token(b)
+            people[code] = [{"id": p["id"], "name": p["name"]} for p in model["people"]]
+        token = org.board_token(b)
         board = {
             "format": BOARD_FORMAT,
-            "version": BOARD_VERSION,
+            "version": FORMAT_VERSION,
             "board_code": b,
             "kind": plan.kind,
             "name": plan.name,
-            "school_name": school.name,
+            "org_name": org.name,
             "exported_at": now_iso(),
             "studio_version": __version__,
-            "school_days": school.school_days,
-            "bell": school.bell,
-            "slots": sorted(plan.slots, key=lambda s: (s["day"], s["period"])),
-            "classes": class_files,
+            "days": org.days,
+            "sessions": org.sessions,
+            "slots": sorted(plan.slots, key=lambda s: (s["day"], s["session"])),
+            "groups": group_files,
             "capture": {
                 "offset_min": st.capture_offset_min,
                 "window_min": st.capture_window_min,
@@ -169,7 +181,7 @@ def export_usb(
                 "min_valid_frames": st.min_valid_frames,
             },
             "models": model_entries,
-            "server": {"url": st.server_url, "cert_sha256": st.server_cert_sha256, "token": token},
+            "server": {"url": st.server_url.strip(), "cert_sha256": st.server_cert_sha256.strip(), "token": token},
             "admin_pin_sha256": _sha256_text(f"{b}:{st.board_admin_pin}"),
             "sound": st.sound,
         }
@@ -179,20 +191,19 @@ def export_usb(
                 "board_code": b,
                 "kind": plan.kind,
                 "name": plan.name,
-                "classes": sorted(plan.classes),
+                "groups": sorted(plan.groups),
                 "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
-                "students": {
-                    code: list(classmodel.read(school.model_dir(code) / "class-model.json")["students"])
-                    for code in sorted(plan.classes)
-                },
+                "people": people,
             }
         )
 
+    # boards.json keeps the screens exported earlier to this stick, unless they are from an older Studio.
     existing = []
     sb_path = root / "server" / "boards.json"
     if sb_path.exists():
         try:
-            existing = json.loads(sb_path.read_text(encoding="utf-8")).get("boards", [])
+            old = json.loads(sb_path.read_text(encoding="utf-8"))
+            existing = old.get("boards", []) if old.get("version") == FORMAT_VERSION else []
         except (ValueError, OSError):
             existing = []
     merged = {e["board_code"]: e for e in existing}
@@ -201,8 +212,8 @@ def export_usb(
         json.dumps(
             {
                 "format": "ssas.server-boards",
-                "version": 1,
-                "school_name": school.name,
+                "version": FORMAT_VERSION,
+                "org_name": org.name,
                 "boards": sorted(merged.values(), key=lambda e: e["board_code"]),
             },
             ensure_ascii=False,
@@ -213,8 +224,8 @@ def export_usb(
 
     index = {
         "format": "ssas.usb",
-        "version": 1,
-        "school_name": school.name,
+        "version": FORMAT_VERSION,
+        "org_name": org.name,
         "exported_at": now_iso(),
         "studio_version": __version__,
         "boards": sorted({p.name for p in (root / "screens").iterdir() if (p / "board.json").exists()}),

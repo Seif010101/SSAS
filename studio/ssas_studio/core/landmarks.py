@@ -55,7 +55,7 @@ def eye_openness(pts: np.ndarray) -> float:
 def head_pose(kps: np.ndarray) -> tuple[float, float]:
     """Rough (yaw, pitch) in degrees from the 5 detector landmarks.
 
-    Positive yaw = the student turned to *their* left (face moves to the right of
+    Positive yaw = the person turned to *their* left (face moves to the right of
     the image); positive pitch = looking up. Good enough to drive the capture ring.
     """
     le, re, nose, lm, rm = kps.astype(np.float64)

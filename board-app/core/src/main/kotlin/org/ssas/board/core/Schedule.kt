@@ -4,35 +4,35 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
-/** One start-of-lesson capture: when the camera may open and must close. */
+/** One start-of-session capture: when the camera may open and must close. */
 data class CaptureWindow(
     val date: LocalDate,
-    val period: Int,
-    val classCode: String,
-    val lessonStart: LocalDateTime,
-    val lessonEnd: LocalDateTime,
+    val session: Int,
+    val groupCode: String,
+    val sessionStart: LocalDateTime,
+    val sessionEnd: LocalDateTime,
     val opens: LocalDateTime,
     val closes: LocalDateTime,
 ) {
-    val key get() = "$date-P$period-$classCode"
+    val key get() = "$date-S$session-$groupCode"
 }
 
-/** Works out the capture windows of this board from its board.json, using the board's own clock. */
+/** Works out the capture windows of this screen from its board.json, using the screen's own clock. */
 class Schedule(private val config: BoardConfig) {
-    private val periods = config.bell.filter { it.kind == "class" }.associateBy { it.number }
+    private val sessions = config.sessions.filter { it.kind == "session" }.associateBy { it.number }
 
     fun windowsOn(date: LocalDate): List<CaptureWindow> {
         val day = date.dayOfWeek.value // Monday = 1 ... Sunday = 7, same as SSAS Studio
-        if (day !in config.school_days) return emptyList()
+        if (day !in config.days) return emptyList()
         val cap = config.capture
         return config.slots.filter { it.day == day }.mapNotNull { slot ->
-            val p = periods[slot.period] ?: return@mapNotNull null
-            val start = LocalDateTime.of(date, LocalTime.parse(p.start))
-            val end = LocalDateTime.of(date, LocalTime.parse(p.end))
+            val s = sessions[slot.session] ?: return@mapNotNull null
+            val start = LocalDateTime.of(date, LocalTime.parse(s.start))
+            val end = LocalDateTime.of(date, LocalTime.parse(s.end))
             val opens = start.plusSeconds((cap.offset_min * 60).toLong())
             val closes = minOf(opens.plusSeconds((cap.window_min * 60).toLong()), end)
             if (!closes.isAfter(opens)) null
-            else CaptureWindow(date, slot.period, slot.class_code, start, end, opens, closes)
+            else CaptureWindow(date, slot.session, slot.group_code, start, end, opens, closes)
         }.sortedBy { it.opens }
     }
 

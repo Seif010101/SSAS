@@ -5,8 +5,8 @@ import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import java.nio.FloatBuffer
 
-/** A person found by the pose model: box, score and 17 COCO keypoints (x, y, score). */
-class Person(val box: FloatArray, val score: Float, val keypoints: FloatArray) {
+/** A body found by the pose model: box, score and 17 COCO keypoints (x, y, score). */
+class Body(val box: FloatArray, val score: Float, val keypoints: FloatArray) {
     fun kp(i: Int) = floatArrayOf(keypoints[i * 3], keypoints[i * 3 + 1], keypoints[i * 3 + 2])
 
     /** Rough head box from nose / eyes / ears; null when the head is not visible. */
@@ -44,7 +44,7 @@ class Rtmo(private val env: OrtEnvironment, private val session: OrtSession, pri
     var scoreThreshold = 0.3f
     private val inputName = session.inputNames.first()
 
-    fun detect(img: RgbImage): List<Person> {
+    fun detect(img: RgbImage): List<Body> {
         val ratio = minOf(size.toFloat() / img.height, size.toFloat() / img.width)
         val newW = (img.width * ratio).toInt()
         val newH = (img.height * ratio).toInt()
@@ -58,7 +58,7 @@ class Rtmo(private val env: OrtEnvironment, private val session: OrtSession, pri
             input[plane + p] = (resized.data[o + 1].toInt() and 0xFF).toFloat() // G
             input[2 * plane + p] = (resized.data[o].toInt() and 0xFF).toFloat() // R
         }
-        val people = ArrayList<Person>()
+        val bodies = ArrayList<Body>()
         OnnxTensor.createTensor(env, FloatBuffer.wrap(input), longArrayOf(1, 3, size.toLong(), size.toLong())).use { t ->
             session.run(mapOf(inputName to t)).use { res ->
                 var dets: OnnxTensor? = null
@@ -69,8 +69,8 @@ class Rtmo(private val env: OrtEnvironment, private val session: OrtSession, pri
                     if (shape.size == 3 && shape[2] == 5L) dets = v
                     if (shape.size == 4) kps = v
                 }
-                val d = dets?.floatBuffer ?: return people
-                val k = kps?.floatBuffer ?: return people
+                val d = dets?.floatBuffer ?: return bodies
+                val k = kps?.floatBuffer ?: return bodies
                 val n = dets.info.shape[1].toInt()
                 val nk = kps.info.shape[2].toInt()
                 for (i in 0 until n) {
@@ -78,10 +78,10 @@ class Rtmo(private val env: OrtEnvironment, private val session: OrtSession, pri
                     if (score < scoreThreshold) continue
                     val box = FloatArray(4) { d.get(i * 5 + it) / ratio }
                     val kp = FloatArray(nk * 3) { j -> if (j % 3 == 2) k.get(i * nk * 3 + j) else k.get(i * nk * 3 + j) / ratio }
-                    people.add(Person(box, score, kp))
+                    bodies.add(Body(box, score, kp))
                 }
             }
         }
-        return people
+        return bodies
     }
 }

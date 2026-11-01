@@ -69,7 +69,7 @@ QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{ backgr
 QAbstractSpinBox::up-arrow {{ image: url(@UP@); width: 9px; height: 9px; }}
 QAbstractSpinBox::down-arrow {{ image: url(@DOWN@); width: 9px; height: 9px; }}
 QComboBox[cell="skip"] {{ background: {WARN_SOFT}; border-color: {WARN}; color: #92400e; }}
-QComboBox[cell="lab"] {{ background: {PRIMARY_SOFT}; border-color: {PRIMARY}; color: {PRIMARY_DARK}; }}
+QComboBox[cell="room"] {{ background: {PRIMARY_SOFT}; border-color: {PRIMARY}; color: {PRIMARY_DARK}; }}
 
 QCheckBox {{ spacing: 8px; background: transparent; }}
 QCheckBox::indicator {{ width: 18px; height: 18px; border: 1px solid {BORDER_STRONG}; border-radius: 4px; background: {SURFACE}; }}

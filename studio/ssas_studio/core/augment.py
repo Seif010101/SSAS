@@ -1,6 +1,6 @@
-"""Augmentations that make laptop photos look like a classroom board camera.
+"""Augmentations that make laptop photos look like a picture from the screen's camera.
 
-They work on aligned 112x112 crops: the face is made small (like a student in
+They work on aligned 112x112 crops: the face is made small (like a person in
 the back row), blurred, compressed, re-lit, slightly rotated or partly covered.
 """
 
@@ -11,7 +11,7 @@ import numpy as np
 
 
 def _low_res(img: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    side = int(rng.integers(18, 57))  # face width on the board camera, in pixels
+    side = int(rng.integers(18, 57))  # face width on the screen's camera, in pixels
     small = cv2.resize(img, (side, side), interpolation=cv2.INTER_AREA)
     return cv2.resize(small, (112, 112), interpolation=cv2.INTER_LINEAR)
 

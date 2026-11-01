@@ -8,10 +8,10 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QMainWindow, QMessageBox, QTa
 
 from .. import __version__
 from .capture import CaptureTab
-from .classes_tab import ClassesTab
 from .common import confirm, muted
 from .context import AppContext
 from .export_tab import ExportTab
+from .groups_tab import GroupsTab
 from .schedule_tab import ScheduleTab
 from .settings_tab import SettingsTab
 from .theme import app_icon
@@ -23,30 +23,30 @@ class MainWindow(QMainWindow):
     def __init__(self, ctx: AppContext):
         super().__init__()
         self.ctx = ctx
-        self.setWindowTitle(f"SSAS Studio {__version__}")
+        self.setWindowTitle(f"SSAS Studio {__version__} — Admin App")
         self.setWindowIcon(app_icon())
         self.resize(1280, 820)
 
         central = QWidget()
         lay = QVBoxLayout(central)
         head = QHBoxLayout()
-        self.school_label = QLabel()
-        self.school_label.setProperty("title", True)
-        head.addWidget(self.school_label)
+        self.org_label = QLabel()
+        self.org_label.setProperty("title", True)
+        head.addWidget(self.org_label)
         head.addStretch(1)
         self.data_label = muted()
         head.addWidget(self.data_label)
         lay.addLayout(head)
 
         self.tabs = QTabWidget()
-        self.classes = ClassesTab(ctx)
+        self.groups = GroupsTab(ctx)
         self.capture = CaptureTab(ctx)
         self.train = TrainTab(ctx)
         self.schedule = ScheduleTab(ctx)
         self.export = ExportTab(ctx)
         self.settings = SettingsTab(ctx)
         for w, name in (
-            (self.classes, "1  Classes"),
+            (self.groups, "1  Groups"),
             (self.capture, "2  Capture"),
             (self.train, "3  Train"),
             (self.schedule, "4  Schedule"),
@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         self.refresh_header()
 
     def refresh_header(self):
-        self.school_label.setText(f"SSAS Studio — {self.ctx.school.name}")
+        self.org_label.setText(f"SSAS Studio — {self.ctx.org.name}")
         self.data_label.setText(f"Data: {self.ctx.data_dir}")
 
     def first_run_check(self):

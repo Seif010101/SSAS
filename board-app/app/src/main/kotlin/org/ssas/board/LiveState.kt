@@ -4,11 +4,11 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import org.ssas.board.core.Face
-import org.ssas.board.core.Person
+import org.ssas.board.core.Body
 
 /** What the screen shows: shared between the camera service and the activity. */
 object LiveState {
-    data class Overlay(val width: Int, val height: Int, val faces: List<Face>, val people: List<Person>)
+    data class Overlay(val width: Int, val height: Int, val faces: List<Face>, val bodies: List<Body>)
 
     @Volatile var status: String = ""
     @Volatile var capturing: Boolean = false

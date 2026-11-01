@@ -61,10 +61,10 @@ def open_folder(path: Path) -> None:
         subprocess.Popen(["xdg-open", str(path)])
 
 
-class ClassPicker(QComboBox):
-    """Drop-down with the school's classes. Keeps the selection when classes are added or removed.
+class GroupPicker(QComboBox):
+    """Drop-down with the organisation's groups. Keeps the selection when groups are added or removed.
 
-    ``changed(code)`` fires when the user picks a class and also after the list is reloaded.
+    ``changed(code)`` fires when the user picks a group and also after the list is reloaded.
     """
 
     changed = Signal(str)
@@ -73,7 +73,7 @@ class ClassPicker(QComboBox):
         super().__init__()
         self.ctx = ctx
         self.currentTextChanged.connect(self.changed)
-        ctx.classes_changed.connect(self.reload)
+        ctx.groups_changed.connect(self.reload)
         self.reload()
 
     @property
@@ -84,7 +84,7 @@ class ClassPicker(QComboBox):
         previous = self.code
         self.blockSignals(True)
         self.clear()
-        self.addItems(self.ctx.school.class_codes())
+        self.addItems(self.ctx.org.group_codes())
         if previous:
             self.setCurrentText(previous)
         self.blockSignals(False)

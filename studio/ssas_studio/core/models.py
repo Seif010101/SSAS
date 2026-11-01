@@ -30,16 +30,17 @@ RTMO_S_URL = (
     "https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/"
     "rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip"
 )
+RTMO_S_SHA256 = "d0703d40d19f3921da51ae725402d5fdae4d2478c7442072d3101bd396f370d8"  # the .onnx inside the zip
 
 
 @dataclass(frozen=True)
 class ModelFile:
     key: str
     filename: str
-    sha256: str | None  # None = not pinned yet (hash recorded on first download)
+    sha256: str  # every model file is checked against this before use
     purpose: str
     required: bool  # required for enrolment/training on the laptop
-    for_board: bool  # copied to the USB for the boards
+    for_board: bool  # copied to the USB for the screens
 
 
 MODELS: dict[str, ModelFile] = {
@@ -70,8 +71,8 @@ MODELS: dict[str, ModelFile] = {
     "pose": ModelFile(
         "pose",
         "rtmo-s.onnx",
-        None,
-        "Body pose (RTMO-s) for the board's stick figures and head count",
+        RTMO_S_SHA256,
+        "Body pose (RTMO-s) for the screen's stick figures and head count",
         False,
         True,
     ),
@@ -112,7 +113,7 @@ def verify_models(models_dir: Path) -> dict[str, str]:
         p = models_dir / m.filename
         if not p.exists():
             result[key] = "missing"
-        elif m.sha256 and sha256_file(p) != m.sha256:
+        elif sha256_file(p) != m.sha256:
             result[key] = "bad checksum"
         else:
             result[key] = "ok"
@@ -161,6 +162,9 @@ def download_models(models_dir: Path, progress: ProgressFn | None = None, includ
             tmp = models_dir / "rtmo-s.onnx.part"
             with z.open(onnx_names[0]) as src, open(tmp, "wb") as dst:
                 shutil.copyfileobj(src, dst)
+            if sha256_file(tmp) != RTMO_S_SHA256:
+                tmp.unlink()
+                raise RuntimeError("The downloaded pose model failed the checksum check. Please try again.")
             tmp.replace(models_dir / MODELS["pose"].filename)
 
 

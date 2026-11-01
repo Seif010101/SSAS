@@ -4,10 +4,10 @@ import cv2
 import numpy as np
 from conftest import needs_face_models
 
-from ssas_studio.core import classmodel
+from ssas_studio.core import groupmodel
 from ssas_studio.core.align import norm_crop
 from ssas_studio.core.pipeline import FaceEngine, train_and_save
-from ssas_studio.core.storage import School
+from ssas_studio.core.storage import Organisation
 
 
 def _variants(img, n, rng):
@@ -26,25 +26,25 @@ def _variants(img, n, rng):
 
 @needs_face_models
 def test_train_and_save_end_to_end(tmp_path, models_dir, astronaut_bgr, cameraman_bgr):
-    school = School(tmp_path)
-    st = school.settings
+    org = Organisation(tmp_path)
+    st = org.settings
     st.epochs, st.folds, st.seeds, st.augment_per_photo = 15, 3, 1, 3
-    school.settings = st
-    school.add_class("9A1", 9, "Advanced", 1)
+    org.settings = st
+    org.add_group("9A1")
     rng = np.random.default_rng(0)
     for name, img in (("Astronaut", astronaut_bgr), ("Camera Man", cameraman_bgr)):
-        s = school.add_student("9A1", name)
+        s = org.add_person("9A1", name)
         for i, v in enumerate(_variants(img, 6, rng)):
-            cv2.imencode(".jpg", v)[1].tofile(str(school.student_dir("9A1", s) / f"p{i:02d}.jpg"))
+            cv2.imencode(".jpg", v)[1].tofile(str(org.person_dir("9A1", s) / f"p{i:02d}.jpg"))
 
     engine = FaceEngine(models_dir, prefer_gpu=False)
-    report = train_and_save(school, "9A1", engine)
+    report = train_and_save(org, "9A1", engine)
     assert report["passed"], report["metrics"]
-    assert [s["photos"] for s in report["students"]] == [6, 6]
+    assert [s["photos"] for s in report["people"]] == [6, 6]
     assert not report["photo_problems"]
 
-    model = classmodel.read(school.model_dir("9A1") / "class-model.json")
-    assert [s["name"] for s in model["students"]] == ["Astronaut", "Camera Man"]
+    model = groupmodel.read(org.model_dir("9A1") / groupmodel.FILE_NAME)
+    assert [s["name"] for s in model["people"]] == ["Astronaut", "Camera Man"]
     assert model["models"]["embedder"]["file"] == "w600k_r50.onnx"
 
     # The saved model recognises a new, low-resolution picture of the astronaut ...
@@ -52,12 +52,12 @@ def test_train_and_save_end_to_end(tmp_path, models_dir, astronaut_bgr, camerama
     crop = norm_crop(astronaut_bgr, face.kps)
     small = cv2.resize(cv2.resize(crop, (40, 40), interpolation=cv2.INTER_AREA), (112, 112))
     e = engine.embedder.embed([crop, small])
-    ids = [r[0] for r in classmodel.identify(model, e)]
+    ids = [r[0] for r in groupmodel.identify(model, e)]
     assert ids == ["9A1-001", "9A1-001"]
 
     # ... and the cache is reused on the second run.
-    cache = school.model_dir("9A1") / "embeddings.npz"
+    cache = org.model_dir("9A1") / "embeddings.npz"
     mtime = cache.stat().st_mtime
-    train_and_save(school, "9A1", engine)
+    train_and_save(org, "9A1", engine)
     assert cache.stat().st_mtime == mtime
-    assert json.loads((school.model_dir("9A1") / "report.json").read_text(encoding="utf-8"))["class_code"] == "9A1"
+    assert json.loads((org.model_dir("9A1") / "report.json").read_text(encoding="utf-8"))["group_code"] == "9A1"

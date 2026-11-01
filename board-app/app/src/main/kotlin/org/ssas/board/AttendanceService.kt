@@ -82,7 +82,7 @@ class AttendanceService : Service() {
             startCapture(test = false, window = active)
         } else if (!busy.get()) {
             val next = schedule.next(now)
-            status(if (next == null) "No lessons in the timetable" else "Next attendance: ${next.classCode} · ${next.date} ${next.opens.toLocalTime().truncatedTo(ChronoUnit.MINUTES)}")
+            status(if (next == null) "No sessions in the timetable" else "Next attendance: ${next.groupCode} · ${next.date} ${next.opens.toLocalTime().truncatedTo(ChronoUnit.MINUTES)}")
         }
     }
 
@@ -104,23 +104,23 @@ class AttendanceService : Service() {
         val config = store.config() ?: return
         val now = LocalDateTime.now()
         val window = given ?: run {
-            // Test capture: use the class of the current or next lesson for 1 minute.
-            val code = Schedule(config).active(now)?.classCode ?: Schedule(config).next(now)?.classCode
-                ?: config.classes.firstOrNull()?.class_code ?: return
+            // Test capture: use the group of the current or next session for 1 minute.
+            val code = Schedule(config).active(now)?.groupCode ?: Schedule(config).next(now)?.groupCode
+                ?: config.groups.firstOrNull()?.group_code ?: return
             CaptureWindow(now.toLocalDate(), 0, code, now, now.plusMinutes(45), now, now.plusMinutes(1))
         }
-        val model = store.classModel(window.classCode) ?: run {
-            status("No model for class ${window.classCode} — import again"); return
+        val model = store.groupModel(window.groupCode) ?: run {
+            status("No model for group ${window.groupCode} — import again"); return
         }
         if (!test) store.markDone(window.key)
         val wake = (getSystemService(Context.POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ssas:capture").apply { acquire(15 * 60 * 1000L) }
         LiveState.capturing = true
-        status("Taking attendance · ${window.classCode}")
+        status("Taking attendance · ${window.groupCode}")
         Thread.sleep(1500) // give the screen time to release its camera preview
         if (config.sound) Sounds.start()
 
-        val agg = AttendanceAggregator(model.students.size, config.capture.min_valid_frames)
+        val agg = AttendanceAggregator(model.people.size, config.capture.min_valid_frames)
         var cameraProblem: String? = null
         val started = System.currentTimeMillis()
         val closesAt = started + java.time.Duration.between(now.coerceAtLeast(window.opens), window.closes).toMillis()
@@ -157,11 +157,11 @@ class AttendanceService : Service() {
                         if (!a.health.ok) cameraProblem = a.health.reason
                         agg.add(a.observation, a.scores)
                         LiveState.frame = scaledForScreen(bmp)
-                        LiveState.overlay = LiveState.Overlay(img.width, img.height, a.faces, a.people)
+                        LiveState.overlay = LiveState.Overlay(img.width, img.height, a.faces, a.bodies)
                         LiveState.changed()
                         bmp.recycle()
-                        val present = (0 until model.students.size).count { agg.isPresent(it) }
-                        status("Taking attendance · ${window.classCode} · $present / ${model.students.size} recognised")
+                        val present = (0 until model.people.size).count { agg.isPresent(it) }
+                        status("Taking attendance · ${window.groupCode} · $present / ${model.people.size} recognised")
                         if (agg.allPresent() && agg.validFrames >= 1) break
                     }
                 } finally {
@@ -176,13 +176,13 @@ class AttendanceService : Service() {
         val payload = ResultPayload.build(config, window, model, result, LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).toString(),
             BuildInfo.version(this), if (result.validFrames == 0) cameraProblem ?: "no usable picture" else null)
         store.saveResult(payload, test)
-        store.lastCapture = "${window.classCode} ${window.date} P${window.period}: " +
+        store.lastCapture = "${window.groupCode} ${window.date} S${window.session}: " +
             "${result.statuses.count { it.name == "PRESENT" }} present, " +
             "${result.statuses.count { it.name == "ABSENT" }} absent, " +
             "${result.statuses.count { it.name == "NEEDS_REVIEW" }} to review" +
             (if (result.validFrames == 0) " (no camera picture)" else "") + if (test) " [test]" else ""
         status("Done · ${store.lastCapture}")
-        if (!test) safely { Uploader(config).flush(store.pending()) }
+        if (!test) safely { upload(config) }
     }
 
     private fun scaledForScreen(bmp: android.graphics.Bitmap): android.graphics.Bitmap {
@@ -191,9 +191,17 @@ class AttendanceService : Service() {
         return android.graphics.Bitmap.createScaledBitmap(bmp, w, h, true)
     }
 
+    /** Send what is waiting; a problem goes to the status line, the admin menu and the next heartbeat. */
+    private fun upload(config: org.ssas.board.core.BoardConfig) {
+        Uploader(config, store.rejectedDir).flush(store.pending()) { problem ->
+            store.lastError = "${LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS)}: Upload: $problem"
+        }
+    }
+
     private fun heartbeatAndUpload() {
         val config = store.config() ?: return
-        val up = Uploader(config)
+        val up = Uploader(config, store.rejectedDir)
+        up.problem?.let { store.lastError = "${LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS)}: $it" }
         if (!up.enabled) return
         val next = Schedule(config).next(LocalDateTime.now())
         val body = buildJsonObject {
@@ -207,7 +215,7 @@ class AttendanceService : Service() {
             put("time", LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).toString())
         }.toString()
         runCatching { up.post("/api/v1/heartbeat", body) }
-        up.flush(store.pending())
+        upload(config)
     }
 
     private fun status(text: String) {

@@ -1,4 +1,4 @@
-"""The Train and Export tabs, driven like a user would (one class, two students)."""
+"""The Train and Export tabs, driven like a user would (one group, two people)."""
 
 import os
 import threading
@@ -44,24 +44,25 @@ def ctx(tmp_path, models_dir):
     from ssas_studio.ui.context import AppContext
 
     c = AppContext(data_dir=tmp_path / "data", models_dir=models_dir)
-    st = c.school.settings
+    st = c.org.settings
     st.epochs, st.folds, st.seeds, st.augment_per_photo = 5, 3, 1, 2
-    c.school.settings = st
+    st.board_admin_pin = "493817"  # export needs a PIN
+    c.org.settings = st
     return c
 
 
-def _add_class(ctx, code, people):
-    """people: {name: image}. Writes 8 photos per student into the class folder."""
+def _add_group(ctx, code, people):
+    """people: {name: image}. Writes 8 photos per person into the group folder."""
     rng = np.random.default_rng(0)
-    ctx.school.add_class(code, 9, "Advanced", 3)
+    ctx.org.add_group(code)
     for name, img in people.items():
-        student = ctx.school.add_student(code, name)
+        person = ctx.org.add_person(code, name)
         for i, v in enumerate(_variants(img, 8, rng)):
-            cv2.imencode(".jpg", v)[1].tofile(str(ctx.school.student_dir(code, student) / f"p{i}.jpg"))
+            cv2.imencode(".jpg", v)[1].tofile(str(ctx.org.person_dir(code, person) / f"p{i}.jpg"))
 
 
 @needs_face_models
-def test_train_tab_lists_students_trains_and_unblocks_export(app, ctx, astronaut_bgr, cameraman_bgr, monkeypatch):
+def test_train_tab_lists_people_trains_and_unblocks_export(app, ctx, astronaut_bgr, cameraman_bgr, monkeypatch):
     from PySide6.QtCore import Qt
 
     from ssas_studio.ui import train_tab
@@ -70,7 +71,7 @@ def test_train_tab_lists_students_trains_and_unblocks_export(app, ctx, astronaut
 
     messages = []
     monkeypatch.setattr(train_tab, "error", lambda parent, m: messages.append(m))
-    _add_class(ctx, "9A3", {"seif": astronaut_bgr, "eyad": cameraman_bgr})
+    _add_group(ctx, "9A3", {"seif": astronaut_bgr, "eyad": cameraman_bgr})
 
     tab = TrainTab(ctx)
     export = ExportTab(ctx)
@@ -85,10 +86,10 @@ def test_train_tab_lists_students_trains_and_unblocks_export(app, ctx, astronaut
     monkeypatch.setattr(tab, "show_report", lambda code: (seen.append(threading.current_thread()), original(code))[1])
 
     tab.start(["9A3"])
-    assert _wait(app, lambda: tab.job is None and ctx.school.report("9A3") is not None), messages
+    assert _wait(app, lambda: tab.job is None and ctx.org.report("9A3") is not None), messages
     assert not messages
     assert seen and all(t is threading.main_thread() for t in seen)
-    assert (ctx.school.model_dir("9A3") / "class-model.json").exists()
+    assert (ctx.org.model_dir("9A3") / "group-model.json").exists()
     assert [tab.table.item(r, 0).text() for r in range(tab.table.rowCount())] == ["seif", "eyad"]
     assert tab.table.item(0, 2).text().endswith("%")
     assert tab.train_btn.isEnabled() and not tab.stop_btn.isEnabled()
@@ -110,21 +111,21 @@ def test_train_tab_lists_students_trains_and_unblocks_export(app, ctx, astronaut
     assert _wait(app, lambda: export.job is None), notes
     assert notes and not notes[0].startswith("ERROR"), notes
     board = usb / "SSAS-USB" / "screens" / "9A3"
-    assert (board / "board.json").exists() and (board / "class-9A3.json").exists()
+    assert (board / "board.json").exists() and (board / "group-9A3.json").exists()
 
 
 @needs_face_models
-def test_train_tab_explains_when_a_class_cannot_be_trained(app, ctx, astronaut_bgr, monkeypatch):
+def test_train_tab_explains_when_a_group_cannot_be_trained(app, ctx, astronaut_bgr, monkeypatch):
     from ssas_studio.ui import train_tab
     from ssas_studio.ui.train_tab import TrainTab
 
     messages = []
     monkeypatch.setattr(train_tab, "error", lambda parent, m: messages.append(m))
-    _add_class(ctx, "9A3", {"seif": astronaut_bgr})
-    ctx.school.add_student("9A3", "eyad")  # no photos
+    _add_group(ctx, "9A3", {"seif": astronaut_bgr})
+    ctx.org.add_person("9A3", "eyad")  # no photos
 
     tab = TrainTab(ctx)
     assert [tab.table.item(r, 0).text() for r in range(tab.table.rowCount())] == ["seif", "eyad"]
     tab.start(["9A3"])
-    assert messages and "two students" in messages[0].lower()
+    assert messages and "two people" in messages[0].lower()
     assert tab.job is None and tab.train_btn.isEnabled()

@@ -7,7 +7,7 @@ from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from ...core.capture_logic import RING_SEGMENTS
-from ...core.student_capture import FrameResult
+from ...core.person_capture import FrameResult
 from .. import theme
 
 BACKGROUND = QColor("#0b1220")
@@ -21,7 +21,7 @@ BANNER_DONE = QColor(22, 163, 74, 210)
 
 
 class RingView(QWidget):
-    """Shows the (mirrored) picture, the face boxes, the ring, the student's name and a status banner."""
+    """Shows the (mirrored) picture, the face boxes, the ring, the person's name and a status banner."""
 
     def __init__(self):
         super().__init__()
@@ -64,7 +64,7 @@ class RingView(QWidget):
     def _paint_hint(self, p: QPainter) -> None:
         p.setPen(QColor("#94a3b8"))
         p.setFont(QFont(self.font().family(), 13))
-        p.drawText(self.rect(), Qt.AlignCenter, "Press “Start camera”.\nThe camera stays on for the whole class.")
+        p.drawText(self.rect(), Qt.AlignCenter, "Press “Start camera”.\nThe camera stays on for the whole group.")
 
     def _paint_boxes(self, p: QPainter, picture: QRectF, scale: float) -> None:
         p.setPen(QPen(QColor(255, 255, 255, 120), 1.5))

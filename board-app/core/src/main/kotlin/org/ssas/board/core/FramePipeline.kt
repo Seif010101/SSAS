@@ -10,12 +10,12 @@ data class FrameAnalysis(
     val observation: FrameObservation,
     val scores: Map<Int, Float>,
     val faces: List<Face>,
-    val people: List<Person>,
+    val bodies: List<Body>,
     val health: FrameHealth.Report,
 )
 
 /**
- * Loads the ONNX models and analyses camera frames for one class.
+ * Loads the ONNX models and analyses camera frames for one group.
  * Create it when a capture starts and close it afterwards to free the memory.
  */
 class FramePipeline(
@@ -41,13 +41,13 @@ class FramePipeline(
     val hasPose get() = pose != null
     private var lastSignature: Long? = null
 
-    /** Find people and faces only (for the on-screen preview, no recognition). */
-    fun preview(img: RgbImage, longSide: Int = 960): Pair<List<Face>, List<Person>> {
+    /** Find bodies and faces only (for the on-screen preview, no recognition). */
+    fun preview(img: RgbImage, longSide: Int = 960): Pair<List<Face>, List<Body>> {
         val (w, h) = Scrfd.sizeFor(img.width, img.height, longSide)
         return detector.detect(img, w, h) to (pose?.detect(img) ?: emptyList())
     }
 
-    fun analyse(img: RgbImage, model: ClassModel, minFacePx: Float = 12f): FrameAnalysis {
+    fun analyse(img: RgbImage, model: GroupModel, minFacePx: Float = 12f): FrameAnalysis {
         val health = FrameHealth.check(img, lastSignature)
         lastSignature = health.signature
         if (!health.ok) {
@@ -55,10 +55,10 @@ class FramePipeline(
         }
         val (w, h) = Scrfd.sizeFor(img.width, img.height, detectLongSide)
         val faces = detector.detect(img, w, h).filter { it.width >= minFacePx }
-        val people = pose?.detect(img) ?: emptyList()
+        val bodies = pose?.detect(img) ?: emptyList()
 
         // A face counts only if it sits on a body (a photo or phone held up has no body under it).
-        val attached = if (pose == null) faces else faces.filter { f -> people.any { p -> faceOnBody(f, p) } }
+        val attached = if (pose == null) faces else faces.filter { f -> bodies.any { b -> faceOnBody(f, b) } }
         val suspicious = faces.size - attached.size
 
         val crops = attached.map { Align.normCrop(img, it.kps) }
@@ -69,12 +69,12 @@ class FramePipeline(
         val bestFor = HashMap<Int, Float>()
         for (e in embeddings) {
             val m = model.match(e)
-            val idx = m.studentIndex
+            val idx = m.personIndex
             if (idx == null) {
                 unknown++
                 continue
             }
-            // One student can only be one face: a second face matching the same student is unknown.
+            // One person can only be one face: a second face matching the same person is unknown.
             if (bestFor.containsKey(idx)) {
                 unknown++
                 if (m.score <= bestFor.getValue(idx)) continue
@@ -85,17 +85,17 @@ class FramePipeline(
         }
         val obs = FrameObservation(
             valid = true, recognised = recognised, unknownFaces = unknown,
-            bodies = if (pose == null) -1 else people.size, faces = attached.size, suspicious = suspicious,
+            bodies = if (pose == null) -1 else bodies.size, faces = attached.size, suspicious = suspicious,
         )
-        return FrameAnalysis(obs, scores, faces, people, health)
+        return FrameAnalysis(obs, scores, faces, bodies, health)
     }
 
-    private fun faceOnBody(f: Face, p: Person): Boolean {
-        val head = p.headBox()
+    private fun faceOnBody(f: Face, body: Body): Boolean {
+        val head = body.headBox()
         if (head != null) {
             return f.centerX in head[0]..head[2] && f.centerY in head[1]..head[3]
         }
-        val b = p.box
+        val b = body.box
         val topThird = b[1] + (b[3] - b[1]) / 3
         return f.centerX in b[0]..b[2] && f.centerY in b[1]..topThird
     }

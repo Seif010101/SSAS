@@ -42,12 +42,19 @@ jobs:
           if curl -sSL --fail -o dl/rtmo.zip "https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip"; then
             unzip -o dl/rtmo.zip -d dl/rtmo
             find dl/rtmo -name "*.onnx" -exec cp {} models/rtmo-s.onnx \;
+            echo "d0703d40d19f3921da51ae725402d5fdae4d2478c7442072d3101bd396f370d8  models/rtmo-s.onnx" | sha256sum -c -
           else
             echo "::warning::Could not download the RTMO pose model; pose tests will be skipped"
           fi
           ls -la models
-      - name: Checksums (pinned in studio/ssas_studio/core/models.py)
-        run: sha256sum models/*
+      - name: Checksums (the same values are pinned in studio/ssas_studio/core/models.py)
+        run: |
+          sha256sum models/*
+          cd models && sha256sum -c - <<'EOF'
+          5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91  det_10g.onnx
+          4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43  w600k_r50.onnx
+          f001b856447c413801ef5c42091ed0cd516fcd21f2d6b79635b1e733a7109dbf  2d106det.onnx
+          EOF
       - uses: actions/upload-artifact@v4
         with:
           name: models

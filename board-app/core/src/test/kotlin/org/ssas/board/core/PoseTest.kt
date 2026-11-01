@@ -12,9 +12,9 @@ class PoseTest {
         TestSupport.requireModels("rtmo-s.onnx")
         val env = OrtEnvironment.getEnvironment()
         val rtmo = Rtmo(env, env.createSession(File(TestSupport.modelsDir, "rtmo-s.onnx").path, OrtSession.SessionOptions()))
-        val people = rtmo.detect(TestSupport.image("astronaut.png"))
-        assertTrue(people.isNotEmpty(), "no person found")
-        val head = people.maxByOrNull { it.score }!!.headBox()
+        val bodies = rtmo.detect(TestSupport.image("astronaut.png"))
+        assertTrue(bodies.isNotEmpty(), "no body found")
+        val head = bodies.maxByOrNull { it.score }!!.headBox()
         assertTrue(head != null, "no head keypoints")
         // The face (from the detector test) is around x 180..270, y 60..180.
         val cx = (head[0] + head[2]) / 2

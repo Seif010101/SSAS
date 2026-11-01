@@ -1,6 +1,6 @@
 """Face alignment to the standard 112x112 ArcFace template.
 
-The same maths is implemented in the board app (board-app/core/.../Align.kt);
+The same maths is implemented in the screen app (board-app/core/.../Align.kt);
 keep the two in sync.
 """
 

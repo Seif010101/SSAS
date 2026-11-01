@@ -1,4 +1,4 @@
-"""Runs the real capture tab with a fake camera: auto-start, saving, auto-advance, finishing the class."""
+"""Runs the real capture tab with a fake camera: auto-start, saving, auto-advance, finishing the group."""
 
 import os
 import time
@@ -60,12 +60,12 @@ class FakeCamera:
 
 @needs_face_models
 @pytest.mark.parametrize("strict", [False])
-def test_capture_a_class_hands_free(tmp_path, models_dir, astronaut_bgr, monkeypatch, capfd, strict):
+def test_capture_a_group_hands_free(tmp_path, models_dir, astronaut_bgr, monkeypatch, capfd, strict):
     from functools import partial
 
     from PySide6.QtWidgets import QApplication
 
-    from ssas_studio.core.student_capture import AutoStart, StudentCapture
+    from ssas_studio.core.person_capture import AutoStart, PersonCapture
     from ssas_studio.ui.capture import tab as ct
     from ssas_studio.ui.capture import worker as cw
     from ssas_studio.ui.context import AppContext
@@ -84,7 +84,7 @@ def test_capture_a_class_hands_free(tmp_path, models_dir, astronaut_bgr, monkeyp
     monkeypatch.setattr(cw, "head_pose", lambda kps: FakeCamera.pose)
     monkeypatch.setattr(cw, "eye_openness", lambda pts: FakeCamera.openness)
     monkeypatch.setattr(cw, "check_face", lambda img, box: None)
-    monkeypatch.setattr(cw, "StudentCapture", partial(StudentCapture, save_interval_s=0.0, done_shown_s=0.2))
+    monkeypatch.setattr(cw, "PersonCapture", partial(PersonCapture, save_interval_s=0.0, done_shown_s=0.2))
     monkeypatch.setattr(cw, "AutoStart", lambda: AutoStart(hold_s=0.15, absent_s=0.1))
     monkeypatch.setattr(ct.QApplication, "beep", staticmethod(lambda: None))
     messages = []
@@ -92,13 +92,13 @@ def test_capture_a_class_hands_free(tmp_path, models_dir, astronaut_bgr, monkeyp
     monkeypatch.setattr(ct, "error", lambda parent, m: messages.append("ERROR " + m))
 
     ctx = AppContext(data_dir=tmp_path / "data", models_dir=models_dir)
-    st = ctx.school.settings
+    st = ctx.org.settings
     st.strict_order = strict
-    ctx.school.settings = st
-    ctx.school.add_class("9A1", 9, "Advanced", 1)
+    ctx.org.settings = st
+    ctx.org.add_group("9A1")
     names = ["Ahmed Ali", "أحمد محمد"]
     for n in names:
-        ctx.school.add_student("9A1", n)
+        ctx.org.add_person("9A1", n)
 
     tab = ct.CaptureTab(ctx)
     tab._probed = True  # do not probe real cameras
@@ -117,13 +117,13 @@ def test_capture_a_class_hands_free(tmp_path, models_dir, astronaut_bgr, monkeyp
 
     assert not [m for m in messages if m.startswith("ERROR")], messages
     assert any("done" in m for m in messages), messages
-    school = ctx.school
-    for s in school.load_class("9A1").students:
-        photos = school.photos("9A1", s)
+    org = ctx.org
+    for s in org.load_group("9A1").people:
+        photos = org.photos("9A1", s)
         assert len(photos) == 40, (s.name, len(photos))
-        assert all(p.parent == school.student_dir("9A1", s) for p in photos)
-    assert tab.class_label.text().startswith("2 of 2")
-    assert tab.start_btn.isEnabled() and tab.class_box.isEnabled()
+        assert all(p.parent == org.person_dir("9A1", s) for p in photos)
+    assert tab.group_label.text().startswith("2 of 2")
+    assert tab.start_btn.isEnabled() and tab.group_box.isEnabled()
     assert "Destroyed while thread" not in capfd.readouterr().err
     # Everyone is done, so starting again explains that instead of opening the camera.
     tab.toggle()

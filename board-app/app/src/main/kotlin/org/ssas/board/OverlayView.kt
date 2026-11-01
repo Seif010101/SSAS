@@ -5,9 +5,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.view.View
-import org.ssas.board.core.Person
+import org.ssas.board.core.Body
 
-/** Draws a box around each head and a stick figure for each person (one colour, no names). */
+/** Draws a box around each head and a stick figure for each body (one colour, no names). */
 class OverlayView(context: Context) : View(context) {
     var overlay: LiveState.Overlay? = null
         set(v) { field = v; invalidate() }
@@ -28,12 +28,12 @@ class OverlayView(context: Context) : View(context) {
         val oy = (height - o.height * scale) / 2
         fun x(v: Float) = ox + v * scale
         fun y(v: Float) = oy + v * scale
-        for (p in o.people) drawPerson(canvas, p, ::x, ::y)
+        for (b in o.bodies) drawBody(canvas, b, ::x, ::y)
         for (f in o.faces) canvas.drawRect(x(f.box[0]), y(f.box[1]), x(f.box[2]), y(f.box[3]), boxPaint)
     }
 
-    private fun drawPerson(canvas: Canvas, p: Person, x: (Float) -> Float, y: (Float) -> Float) {
-        for (bone in Person.SKELETON) {
+    private fun drawBody(canvas: Canvas, p: Body, x: (Float) -> Float, y: (Float) -> Float) {
+        for (bone in Body.SKELETON) {
             val a = p.kp(bone[0])
             val b = p.kp(bone[1])
             if (a[2] < 0.3f || b[2] < 0.3f) continue

@@ -34,7 +34,7 @@ import org.ssas.board.core.UsbTree
 
 /**
  * The only screen: the camera picture with head boxes and stick figures, and a small status line.
- * No settings for teachers; the hidden admin menu (long-press the title + PIN) imports from USB etc.
+ * No settings for the people in the room; the hidden admin menu (long-press the title + PIN) imports from USB etc.
  */
 class MainActivity : Activity() {
     private lateinit var store: BoardStore
@@ -108,7 +108,7 @@ class MainActivity : Activity() {
         val config = store.config()
         val ready = config != null && store.isReady()
         setupPanel.visibility = if (ready) View.GONE else View.VISIBLE
-        title.text = if (config == null) "SSAS Board" else "SSAS Board · ${config.board_code}${if (config.kind == "lab") " (${config.name})" else ""}"
+        title.text = if (config == null) "SSAS Board" else "SSAS Board · ${config.board_code}${if (config.kind == "shared") " (${config.name})" else ""}"
         val armed = if (AttendanceService.armed) "Ready ✓" else "Not running — open the app again"
         status.text = listOfNotNull(armed, LiveState.status.ifBlank { null },
             store.lastCapture?.let { "Last: $it" }).joinToString("   ·   ")
@@ -206,8 +206,8 @@ class MainActivity : Activity() {
                         val rgb = ImageConvert.fromYuv(img)
                         h.post {
                             try {
-                                val (faces, people) = pipeline?.preview(rgb, 640) ?: return@post
-                                val o = LiveState.Overlay(rgb.width, rgb.height, faces, people)
+                                val (faces, bodies) = pipeline?.preview(rgb, 640) ?: return@post
+                                val o = LiveState.Overlay(rgb.width, rgb.height, faces, bodies)
                                 main.post { overlay.overlay = o }
                             } finally { analysing = false }
                         }
@@ -255,10 +255,21 @@ class MainActivity : Activity() {
     private fun askPin() {
         val config = store.config()
         if (config == null) { adminMenu(); return }
+        val locked = store.pinLockRemainingMs()
+        if (locked > 0) {
+            status.text = "Too many wrong PINs. Try again in ${locked / 60_000 + 1} min."
+            return
+        }
         val input = EditText(this).apply { inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "PIN" }
         AlertDialog.Builder(this).setTitle("Admin PIN").setView(input)
             .setPositiveButton("OK") { _, _ ->
-                if (config.checkPin(input.text.toString())) adminMenu() else status.text = "Wrong PIN"
+                if (config.checkPin(input.text.toString())) {
+                    store.pinRight()
+                    adminMenu()
+                } else {
+                    val left = store.pinWrong()
+                    status.text = if (left > 0) "Wrong PIN ($left tries left)" else "Too many wrong PINs: the menu is locked for 5 minutes"
+                }
             }
             .setNegativeButton("Cancel", null).show()
     }
@@ -289,14 +300,17 @@ class MainActivity : Activity() {
         val text = if (files.isEmpty()) "No results yet." else files.joinToString("\n") { f ->
             runCatching {
                 val r = org.ssas.board.core.ResultPayload.parse(f.readText())
-                val c = r.students.groupingBy { it.status }.eachCount()
-                "${r.date} P${r.period} ${r.class_code}: ${c["present"] ?: 0} present, ${c["absent"] ?: 0} absent, ${c["needs_review"] ?: 0} review" +
+                val c = r.people.groupingBy { it.status }.eachCount()
+                "${r.date} S${r.session} ${r.group_code}: ${c["present"] ?: 0} present, ${c["absent"] ?: 0} absent, ${c["needs_review"] ?: 0} review" +
                     (if (f.name.contains("_test")) " [test]" else "")
             }.getOrDefault(f.name)
         }
         val pending = store.pending().size
+        val rejected = store.rejected().size
         AlertDialog.Builder(this).setTitle("Last results").setMessage(
-            text + "\n\nWaiting to be sent to the server: $pending" + (store.lastError?.let { "\nLast problem: $it" } ?: "")
+            text + "\n\nWaiting to be sent to the server: $pending" +
+                (if (rejected > 0) "\nRefused by the server (kept on this board, see Export results): $rejected" else "") +
+                (store.lastError?.let { "\nLast problem: $it" } ?: "")
         ).setPositiveButton("OK", null).show()
     }
 
@@ -361,7 +375,7 @@ class MainActivity : Activity() {
             }
             main.post {
                 dialog.dismiss()
-                r.onSuccess { msg("Board ${it.board_code} is ready.\nIt will take attendance by itself at the start of each lesson.") }
+                r.onSuccess { msg("Board ${it.board_code} is ready.\nIt will take attendance by itself at the start of each session.") }
                 r.onFailure { msg("Import failed: ${it.message}") }
                 refresh()
             }

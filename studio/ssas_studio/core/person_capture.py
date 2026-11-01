@@ -1,7 +1,7 @@
-"""Hands-free capture of a whole class: wait for each student, capture, show "Done", move on.
+"""Hands-free capture of a whole group: wait for each person, capture, show "Done", move on.
 
 No camera or window code here, so the whole flow can be tested. ``CaptureSession`` (in ``capture_logic``) decides
-what counts as a photo; this module decides when a student starts and ends.
+what counts as a photo; this module decides when a person's turn starts and ends.
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ from .capture_logic import SECOND_FACE_RATIO, CaptureSession
 
 @dataclass
 class AutoStart:
-    """Decides when to begin capturing the next student: one clear face, held steady for a moment.
+    """Decides when to begin capturing the next person: one clear face, held steady for a moment.
 
-    After a student is finished the previous face has to leave the picture first, so the same
+    After a person is finished the previous face has to leave the picture first, so the same
     person is not captured twice by accident.
     """
 
@@ -69,26 +69,26 @@ class Measurement:
 class FrameResult:
     """What to show and do for one camera frame."""
 
-    state: str  # "idle" (no student chosen), "waiting" (for the student to step in), "capturing" or "done"
+    state: str  # "idle" (nobody chosen), "waiting" (for the person to step in), "capturing" or "done"
     message: str
-    name: str = ""  # the student whose turn it is
+    name: str = ""  # the person whose turn it is
     blocked: bool = False  # something is wrong (second person, too dark...): shown in red
     hold: float = 0.0  # 0..1, how long the face has been steady (waiting state)
     target: int = -1  # ring part to highlight
     save_as: str | None = None  # save this frame's face under this file name
-    student_done: bool = False  # this frame finished the student
+    person_done: bool = False  # this frame finished the person
     phase: str = ""  # "front", "ring", "blink", "done" while capturing
     filled: list[float] = field(default_factory=list)  # 0..1 per ring part
     saved: int = 0
     total: int = 0
 
 
-class StudentCapture:
-    """Hands-free capture for a whole class, without any camera or window code (so it can be tested).
+class PersonCapture:
+    """Hands-free capture for a whole group, without any camera or window code (so it can be tested).
 
-    ``set_student`` says whose turn it is. ``step`` is called for every camera frame and answers what to show
+    ``set_person`` says whose turn it is. ``step`` is called for every camera frame and answers what to show
     and whether to save the face. Flow: wait until one face is steady (``AutoStart``), capture the 8+8 poses,
-    show "Done" for a moment, then wait for the next student.
+    show "Done" for a moment, then wait for the next person.
     """
 
     def __init__(
@@ -120,14 +120,14 @@ class StudentCapture:
     def capturing(self) -> bool:
         return self.session is not None
 
-    def set_student(self, name: str | None) -> None:
+    def set_person(self, name: str | None) -> None:
         """Whose turn it is (None: nobody). Changing it in the middle of a capture abandons that capture."""
         if name != self.name and self.session is not None:
             self._stop_session()
         self.name = name
 
     def skip(self) -> None:
-        """Give up on the current student (the next frame goes back to waiting)."""
+        """Give up on the current person (the next frame goes back to waiting)."""
         self._skip = True
 
     def step(self, face_widths: list[float], now: float, measure: Callable[[], Measurement]) -> FrameResult:
@@ -135,10 +135,10 @@ class StudentCapture:
         if face_widths:
             self._last_face = now
         if now < self._done_until:
-            self.gate.update(face_widths, now)  # counts how long the last student's face has been gone
+            self.gate.update(face_widths, now)  # counts how long the last person's face has been gone
             return FrameResult("done", f"Done ✓   {self._done_name}")
         if self.name is None:
-            return FrameResult("idle", "Choose a student in the list")
+            return FrameResult("idle", "Choose a person in the list")
         if self._skip:
             self._skip = False
             self._stop_session()
@@ -148,7 +148,7 @@ class StudentCapture:
             if not ready:
                 return FrameResult("waiting", self._waiting_message(face_widths, hold), name=self.name, hold=hold)
             self._start_session(now)
-        if now - self._last_face > self.give_up_s:  # the student walked away
+        if now - self._last_face > self.give_up_s:  # the person walked away
             self._stop_session()
             return FrameResult("waiting", self._waiting_message([], 0.0), name=self.name)
         return self._capture_step(face_widths, now, measure())
@@ -195,7 +195,7 @@ class StudentCapture:
         )
         if session.finished:
             self._done_name, self._done_until = self.name, now + self.done_shown_s
-            result.state, result.message, result.student_done = "done", f"Done ✓   {self.name}", True
+            result.state, result.message, result.person_done = "done", f"Done ✓   {self.name}", True
             self.name = None
             self._stop_session()
         return result

@@ -1,9 +1,9 @@
 """The Face-ID-like capture flow, independent of the GUI so it can be tested.
 
-The student looks straight first, then slowly turns their head around a circle.
+The person looks straight first, then slowly turns their head around a circle.
 By default each of the 8 ring parts fills wherever the nose points ("free sweep").
 In strict mode the parts must be followed in a random order instead, so a printed
-photo or a video cannot follow. The student must also blink once, at any time.
+photo or a video cannot follow. The person must also blink once, at any time.
 Photos are saved only when exactly one person is in front of the camera and the
 picture quality is good.
 """
@@ -21,7 +21,7 @@ FREE_MIN_DEG = 9.0  # free sweep: the head must be turned at least this far from
 FREE_MAX_DEG = 45.0
 FRONT_TOLERANCE_DEG = 8.0
 SECOND_FACE_RATIO = 0.35  # another face at least this big (vs the main one) = a second person
-BLINK_CLOSED = 0.55  # eye openness below this fraction of the student's normal = closed
+BLINK_CLOSED = 0.55  # eye openness below this fraction of the person's normal = closed
 BLINK_OPEN = 0.8
 
 

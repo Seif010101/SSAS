@@ -1,9 +1,12 @@
-# SSAS Board (Android app for the classroom boards)
+# SSAS Board — the Smart Screen App (Android)
 
 - `core/` — pure Kotlin: face detection (SCRFD), alignment, recognition (ArcFace), body pose (RTMO),
-  the attendance decision, the timetable and the file formats. Tested on the JVM with the same ONNX
+  the attendance decision, the timetable and the file formats (board.json, group-<code>.json, results; version 2). Tested on the JVM with the same ONNX
   models as SSAS Studio (`ParityTest` compares with the Python results in `src/test/resources`).
-- `app/` — the Android app: background camera service, Camera2 capture, USB import, screen.
+- `app/` — the Android app: background camera service, Camera2 capture, USB import, upload to the server, screen.
+
+Where things are: `docs/ARCHITECTURE.md`. Security rules this app follows: `docs/security.md`
+(file names from the USB are checked, the admin PIN locks after 5 wrong tries, results go only over HTTPS).
 
 ```bash
 # core tests (models from SSAS Studio's model folder)
