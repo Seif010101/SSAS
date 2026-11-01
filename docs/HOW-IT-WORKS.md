@@ -108,6 +108,14 @@
 
 **خلاص.** من النهارده الشاشات بتاخد الحضور لوحدها.
 
+| Groups | Capture | Train |
+|---|---|---|
+| ![](screenshots/studio/1-groups.png) | ![](screenshots/studio/2-capture.png) | ![](screenshots/studio/3-train.png) |
+
+| Schedule | Export to USB |
+|---|---|
+| ![](screenshots/studio/4-schedule.png) | ![](screenshots/studio/5-export.png) |
+
 ---
 
 ## 5. Session واحدة، دقيقة بدقيقة

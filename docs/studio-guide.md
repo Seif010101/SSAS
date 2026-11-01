@@ -40,6 +40,8 @@
 ## الخطوات بالترتيب (نفس ترتيب التابات)
 
 ### 1. Groups
+![Groups tab](screenshots/studio/1-groups.png)
+
 - **Add group:**
   - **Code:** كود قصير، زي `9A1` أو `TEAM-A` أو `NIGHT-2`. ده اسم فولدر المجموعة، ومش بيتغير بعد كده.
   - **Name:** اختياري، زي "Grade 9 Advanced 1" أو "Sales team".
@@ -49,6 +51,8 @@
   - أو من **Excel/CSV** (الأسماء في أول عمود).
 
 ### 2. Capture
+![Capture tab](screenshots/studio/2-capture.png)
+
 الكاميرا بتفضل شغالة **لمجموعة كاملة**، والناس بيعدّوا واحد ورا التاني، من غير ماوس.
 
 **التجهيز مرة واحدة:**
@@ -72,6 +76,8 @@
 - **للتشديد ضد الغش بصورة أو فيديو:** فعّل **Strict capture** من Settings. الدايرة بتطلب الأجزاء بترتيب عشوائي.
 
 ### 3. Train
+![Train tab](screenshots/studio/3-train.png)
+
 - أسماء المجموعة بتظهر في الجدول **حتى قبل التدريب**، وجنب كل اسم عدد صوره.
 - **لازم شخصين على الأقل** يكون عندهم صور.
 - اضغط **Train this group** أو **Train all groups**.
@@ -88,6 +94,8 @@
 **ملحوظة:** ناس المجموعات التانية بيتستخدموا كـ "غرباء". علشان كده: صوّر كل المجموعات الأول، وبعدين **Train all groups** في الآخر.
 
 ### 4. Schedule
+![Schedule tab](screenshots/studio/4-schedule.png)
+
 - **Working days:** أيام الشغل.
 - **Session times:** المواعيد (نفسها كل يوم).
   - كل صف نوعه:
@@ -103,6 +111,8 @@
 - **Copy to all groups:** بينسخ الجدول لكل المجموعات.
 
 ### 5. Export to USB
+![Export tab](screenshots/studio/5-export.png)
+
 1. اختار الفلاشة، وعلّم الشاشات، واضغط **Export**.
    - **محتاج الأول PIN للشاشات** (6 أرقام أو أكتر) من Settings. لو مش موجود، البرنامج هيقولك.
 2. هيتعمل فولدر **SSAS-USB** على الفلاشة، وفيه:

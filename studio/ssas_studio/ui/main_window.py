@@ -35,6 +35,7 @@ class MainWindow(QMainWindow):
         head.addWidget(self.org_label)
         head.addStretch(1)
         self.data_label = muted()
+        self.data_label.setWordWrap(False)  # a Windows path must stay on one line
         head.addWidget(self.data_label)
         lay.addLayout(head)
 
