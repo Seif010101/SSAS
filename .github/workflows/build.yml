@@ -246,11 +246,13 @@ jobs:
           make_latest: true
           body: |
             **Downloads**
-            - `SSAS-Studio-Setup-${{ env.VERSION }}.exe` — the laptop program (capture students, train, export to USB). Windows 10/11.
-            - `ssas-board.apk` — the app for the classroom boards (also inside the USB folder that Studio exports).
-            - `ssas-server.tar.gz` — the small server (see docs/server-setup.md).
+            - `SSAS-Studio-Setup-${{ env.VERSION }}.exe` — the **Admin App** for the Windows laptop: capture people, train one model per group, set the timetable, export to USB. Windows 10/11.
+            - `ssas-board.apk` — the **Smart Screen App** for the Android smart screens (also inside the USB folder that the Admin App exports).
+            - `ssas-server.tar.gz` — the optional server: on a computer in your network (docs/server-setup.md) or on a VPS with real HTTPS (docs/server-vps.md).
 
-            Guides: docs/studio-guide.md · docs/board-install.md · docs/server-setup.md
+            **Upgrading from 0.1:** the Admin App converts your data by itself (photos and trained models are kept). On each screen, uninstall the old app once (the app is now signed with a private key), install this one, set a new screen PIN in Settings, export again, import again, and upload the new server/boards.json.
+
+            How it all works: docs/HOW-IT-WORKS.md · Guides: docs/studio-guide.md · docs/board-install.md · docs/server-vps.md
 
             Website: https://ssas.ae
           files: out/*
