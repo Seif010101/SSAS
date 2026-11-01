@@ -1,4 +1,6 @@
-# SSAS — Smart Student Attendance System
+# SSAS — Seif's Smart Attendance System
+
+Website and downloads: **https://ssas.ae** (published from branch `main`).
 
 At the start of each lesson, the classroom board's camera takes attendance once. It runs for at most
 a few minutes, then turns off and sends a text list (present / absent / needs review) to a small school

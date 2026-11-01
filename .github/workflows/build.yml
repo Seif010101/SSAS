@@ -213,4 +213,6 @@ jobs:
             - `ssas-server.tar.gz` — the small server (see docs/server-setup.md).
 
             Guides: docs/studio-guide.md · docs/board-install.md · docs/server-setup.md
+
+            Website: https://ssas.ae
           files: out/*
