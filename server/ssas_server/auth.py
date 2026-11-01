@@ -7,7 +7,7 @@ import hmac
 import secrets
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pyotp
 from argon2 import PasswordHasher
@@ -67,8 +67,13 @@ def reset_totp(db: Database, email: str) -> str:
 def set_password(db: Database, email: str, password: str) -> None:
     if len(password) < 10:
         raise ValueError("The password must have at least 10 characters.")
-    if db.exec("UPDATE admins SET pw_hash = ?, failed = 0, locked_until = NULL WHERE email = ?",
-               (_ph.hash(password), email.lower())) == 0:
+    if (
+        db.exec(
+            "UPDATE admins SET pw_hash = ?, failed = 0, locked_until = NULL WHERE email = ?",
+            (_ph.hash(password), email.lower()),
+        )
+        == 0
+    ):
         raise ValueError("No such admin")
     db.audit("cli", "admin.set_password", {"email": email})
 
@@ -85,7 +90,7 @@ def login(db: Database, email: str, password: str, code: str, at: float | None =
     if row is None:
         _ph.hash("dummy-password-to-even-out-timing")
         raise LoginError(generic)
-    if row["locked_until"] and datetime.fromisoformat(row["locked_until"]) > datetime.now(timezone.utc):
+    if row["locked_until"] and datetime.fromisoformat(row["locked_until"]) > datetime.now(UTC):
         raise LoginError("Too many attempts. Try again in 15 minutes.")
     ok = True
     try:
@@ -97,8 +102,10 @@ def login(db: Database, email: str, password: str, code: str, at: float | None =
         ok = False  # wrong code, or a code that was already used (replay)
     if not ok:
         failed = row["failed"] + 1
-        locked = (datetime.now(timezone.utc) + timedelta(minutes=LOCK_MINUTES)).isoformat() if failed >= MAX_FAILED else None
-        db.exec("UPDATE admins SET failed = ?, locked_until = ? WHERE id = ?", (0 if locked else failed, locked, row["id"]))
+        locked = (datetime.now(UTC) + timedelta(minutes=LOCK_MINUTES)).isoformat() if failed >= MAX_FAILED else None
+        db.exec(
+            "UPDATE admins SET failed = ?, locked_until = ? WHERE id = ?", (0 if locked else failed, locked, row["id"])
+        )
         db.audit(row["email"], "login.failed", {"locked": bool(locked)})
         raise LoginError(generic)
     db.exec("UPDATE admins SET failed = 0, locked_until = NULL, last_totp_step = ? WHERE id = ?", (step, row["id"]))
@@ -122,8 +129,10 @@ def _totp_step(secret: str, code: str, at: float) -> int | None:
 # ----- sessions -----
 def new_session(db: Database, admin: Admin) -> str:
     token = secrets.token_urlsafe(32)
-    db.exec("INSERT INTO sessions (token_hash, admin_id, created_at, last_seen) VALUES (?, ?, ?, ?)",
-            (_sha(token), admin.id, now(), now()))
+    db.exec(
+        "INSERT INTO sessions (token_hash, admin_id, created_at, last_seen) VALUES (?, ?, ?, ?)",
+        (_sha(token), admin.id, now(), now()),
+    )
     return token
 
 
@@ -132,12 +141,15 @@ def session_admin(db: Database, token: str | None, idle_min: int, max_hours: int
         return None
     row = db.one(
         "SELECT s.created_at, s.last_seen, a.id, a.email, a.name, a.role FROM sessions s "
-        "JOIN admins a ON a.id = s.admin_id WHERE s.token_hash = ?", (_sha(token),))
+        "JOIN admins a ON a.id = s.admin_id WHERE s.token_hash = ?",
+        (_sha(token),),
+    )
     if row is None:
         return None
-    t = datetime.now(timezone.utc)
-    if (t - datetime.fromisoformat(row["last_seen"]) > timedelta(minutes=idle_min)
-            or t - datetime.fromisoformat(row["created_at"]) > timedelta(hours=max_hours)):
+    t = datetime.now(UTC)
+    if t - datetime.fromisoformat(row["last_seen"]) > timedelta(minutes=idle_min) or t - datetime.fromisoformat(
+        row["created_at"]
+    ) > timedelta(hours=max_hours):
         end_session(db, token)
         return None
     db.exec("UPDATE sessions SET last_seen = ? WHERE token_hash = ?", (now(), _sha(token)))

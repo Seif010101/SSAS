@@ -1,0 +1,14 @@
+# Settings for the tools only (the server is run from this folder, not installed as a package).
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = [
+    "E501",  # long lines: the formatter handles code; SQL and messages may be long
+    "B008",  # FastAPI's Form(...) defaults
+]

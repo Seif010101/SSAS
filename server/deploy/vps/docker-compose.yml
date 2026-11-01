@@ -1,0 +1,46 @@
+# SSAS server on a VPS (for example Hostinger) with automatic HTTPS. Guide: docs/server-vps.md
+#
+#   caddy  answers on ports 80 and 443, gets a free Let's Encrypt certificate for SSAS_DOMAIN
+#          and passes the requests to the app.
+#   ssas   the app, plain HTTP inside Docker only (no port is published). All its data is in the
+#          Docker volume ssas_data: back it up with ../../backup.sh (see the guide).
+#
+# Start:   docker compose up -d --build
+# Update:  docker compose up -d --build     (after copying the new server files)
+# Logs:    docker compose logs -f
+services:
+  ssas:
+    build: ../..
+    image: ssas-server:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SSAS_TLS: "off"            # Caddy does HTTPS
+      SSAS_BEHIND_PROXY: "true"  # trust the visitor address Caddy passes on (for the sign-in limit)
+    volumes:
+      - ssas_data:/data
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [ssas]
+    environment:
+      SSAS_DOMAIN: ${SSAS_DOMAIN:?Set SSAS_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # the certificates
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  ssas_data:
+  caddy_data:
+  caddy_config:

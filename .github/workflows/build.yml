@@ -46,6 +46,8 @@ jobs:
             echo "::warning::Could not download the RTMO pose model; pose tests will be skipped"
           fi
           ls -la models
+      - name: Checksums (pinned in studio/ssas_studio/core/models.py)
+        run: sha256sum models/*
       - uses: actions/upload-artifact@v4
         with:
           name: models
@@ -91,8 +93,15 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r server/requirements-dev.txt
-      - working-directory: server
+      - name: Style (ruff)
+        working-directory: server
+        run: ruff check . && ruff format --check .
+      - name: Tests
+        working-directory: server
         run: python -m pytest -q
+      - name: Attack test against a running server
+        working-directory: server
+        run: python tools/pentest.py
 
   android:
     name: Board app (APK)

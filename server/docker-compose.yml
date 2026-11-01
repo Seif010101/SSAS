@@ -1,4 +1,6 @@
-# SSAS server: one container, HTTPS on port 443, all data in ./data (back this folder up).
+# SSAS server on a computer in your own network: one container, HTTPS on port 443 with the server's own
+# certificate. All data is in the Docker volume ssas_data: back it up with ./backup.sh (docs/server-setup.md).
+# For a VPS on the internet with a real domain, use deploy/vps/ instead (docs/server-vps.md).
 services:
   ssas:
     build: .
@@ -8,7 +10,10 @@ services:
     ports:
       - "443:8443"
     volumes:
-      - ./data:/data
+      - ssas_data:/data
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  ssas_data:

@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}SSAS{% endblock %} · {{ school }}</title>
+  <title>{% block title %}SSAS{% endblock %} · {{ org }}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="top">
-    <div class="brand"><span class="mark">✓</span> SSAS <span class="muted">· {{ school }}</span></div>
+    <div class="brand"><span class="mark">✓</span> SSAS <span class="muted">· {{ org }}</span></div>
     {% if admin %}
     <nav>
       <a href="/">Attendance</a>

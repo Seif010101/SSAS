@@ -1,0 +1,6 @@
+# Caddy gets and renews the HTTPS certificate for this address by itself (Let's Encrypt).
+# The app adds the security headers (HSTS included) to its own answers.
+{$SSAS_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy ssas:8000
+}

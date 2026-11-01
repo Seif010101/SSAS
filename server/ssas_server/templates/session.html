@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} S{{ session }}{% endblock %}
+{% block body %}
+<p><a href="/?day={{ day }}">← {{ day }}</a></p>
+<h1>{{ code }} · session {{ session }} · {{ day }}</h1>
+<p class="muted">Taken by board {{ p.board_code }} at {{ p.captured_at }} · {{ p.valid_frames }} good pictures of {{ p.frames }}
+  {% if p.camera_problem %}· <span class="error">camera problem: {{ p.camera_problem }}</span>{% endif %}
+  · received {{ received }}</p>
+<p>{% for k, v in c.items() %}<span class="pill {{ k }}">{{ labels[k] }}: {{ v }}</span> {% endfor %}</p>
+<table class="list">
+  <thead><tr><th>Name</th><th>ID</th><th>Status</th><th>Note</th></tr></thead>
+  <tbody>
+  {% for person in p.people %}
+    <tr>
+      <td dir="auto">{{ person.name }}</td>
+      <td class="muted">{{ person.id }}</td>
+      <td><span class="dot {{ person.status }}"></span> {{ labels.get(person.status, person.status) }}</td>
+      <td>{% if person.id in flags and flags[person.id].absent_from == session %}<span class="badge warn">was present in session {{ flags[person.id].present_in }}</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
