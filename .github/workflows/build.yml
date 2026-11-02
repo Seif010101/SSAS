@@ -13,14 +13,14 @@ on:
         type: boolean
         default: false
       version:
-        description: "Version number (e.g. 0.2.0)"
-        default: "0.2.0"
+        description: "Version number (e.g. 0.2.1)"
+        default: "0.2.1"
 
 permissions:
   contents: write
 
 env:
-  VERSION: ${{ inputs.version || '0.2.0' }}
+  VERSION: ${{ inputs.version || '0.2.1' }}
 
 jobs:
   models:

@@ -72,7 +72,7 @@ and update `data-format.md` in the same change. Studio converts a 0.1 data folde
 | I want to… | Change |
 |---|---|
 | add a Studio setting | `studio/ssas_studio/core/storage.py` (`Settings`), `ui/settings_tab.py`; if the screen needs it: `core/export.py` + `board-app/core/.../BoardConfig.kt` |
-| change how presence is decided | `board-app/core/.../Attendance.kt` (+ `AttendanceTest.kt`) and the table in `docs/board-install.md` |
+| change how presence is decided | `board-app/core/.../Attendance.kt` (+ `AttendanceTest.kt`) **and** its Python copy for the Live demo, `studio/ssas_studio/core/attendance.py` (+ `tests/test_live_demo.py`), and the table in `docs/board-install.md` |
 | change matching / thresholds | `studio/ssas_studio/core/train.py` (calibration) and `board-app/core/.../GroupModel.kt` (`match`) — keep `groupmodel.identify` in Python identical |
 | change face maths (detect / align / embed) | both `studio/ssas_studio/core/{detect,align,embed}.py` and `board-app/core/.../{Scrfd,Align,Embedder}.kt`; regenerate fixtures with `studio/tools/make_parity.py`; `ParityTest` must pass |
 | add a server page | `server/ssas_server/pages.py` + a template; add it to `tests/test_server.py` |

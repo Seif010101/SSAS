@@ -10,6 +10,7 @@ from .. import __version__
 from .capture import CaptureTab
 from .common import confirm, muted
 from .context import AppContext
+from .demo_tab import DemoTab
 from .export_tab import ExportTab
 from .groups_tab import GroupsTab
 from .schedule_tab import ScheduleTab
@@ -45,6 +46,7 @@ class MainWindow(QMainWindow):
         self.train = TrainTab(ctx)
         self.schedule = ScheduleTab(ctx)
         self.export = ExportTab(ctx)
+        self.demo = DemoTab(ctx)
         self.settings = SettingsTab(ctx)
         for w, name in (
             (self.groups, "1  Groups"),
@@ -52,14 +54,24 @@ class MainWindow(QMainWindow):
             (self.train, "3  Train"),
             (self.schedule, "4  Schedule"),
             (self.export, "5  Export to USB"),
+            (self.demo, "▶  Live demo"),
             (self.settings, "Settings"),
         ):
             self.tabs.addTab(w, name)
+        self.tabs.currentChanged.connect(self._on_tab_changed)
         lay.addWidget(self.tabs, 1)
         self.setCentralWidget(central)
 
         ctx.settings_changed.connect(self.refresh_header)
         self.refresh_header()
+
+    def _on_tab_changed(self, _index: int) -> None:
+        """Only the tab on screen may use the camera."""
+        current = self.tabs.currentWidget()
+        if current is not self.capture:
+            self.capture.stop_camera()
+        if current is not self.demo:
+            self.demo.stop_camera()
 
     def refresh_header(self):
         self.org_label.setText(f"SSAS Studio — {self.ctx.org.name}")
@@ -85,5 +97,6 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.capture.shutdown()
+        self.demo.shutdown()
         stop_all()
         super().closeEvent(event)

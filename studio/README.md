@@ -40,7 +40,9 @@ ssas_studio/
 │   ├── train.py            the classifier, cross-validation, thresholds (numpy only)
 │   ├── pipeline.py         photos → embeddings (cached) → trained group model + report
 │   ├── groupmodel.py       the group-model file the screen reads
-│   └── export.py           the SSAS-USB folder (checks the PIN and the server address first)
+│   ├── export.py           the SSAS-USB folder (checks the PIN and the server address first)
+│   ├── attendance.py       the screen's decision rules in Python (same as board-app Attendance.kt)
+│   └── live.py             the Live demo: recognise a group in a camera picture, the result a screen would send
 └── ui/                 Qt widgets only; the work is done by core/
     ├── main_window.py      the tabs
     ├── context.py          AppContext: shared state + signals (groups_changed, photos_changed, ...)
@@ -48,6 +50,7 @@ ssas_studio/
     ├── common.py           small helpers (buttons, labels, dialogs, GroupPicker)
     ├── theme.py            colours and the style sheet (always light, also in Windows dark mode)
     ├── groups_tab.py · train_tab.py · schedule_tab.py · export_tab.py · settings_tab.py
+    ├── demo_tab.py         ▶ Live demo: the laptop plays the smart screen (no screen, no server needed)
     └── capture/            the Capture tab: tab.py (widgets), worker.py (camera thread), ring_view.py (painting)
 ```
 

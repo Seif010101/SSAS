@@ -314,6 +314,10 @@ class CaptureTab(QWidget):
         elif self._all_done:
             info(self, f"All people of {self.group_box.code} are done ✓")
 
+    def stop_camera(self) -> None:
+        if self.worker:
+            self.worker.stop()
+
     def retake(self) -> None:
         code, person = self._person()
         if person and confirm(self, f"Delete all photos of {person.name} and take them again?"):
